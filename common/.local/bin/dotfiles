@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# dotfiles - Management utility for the myLinux configuration repository
+
+REPO_DIR="$HOME/Documents/GitHub/myLinux"
+
+usage() {
+    echo "Usage: dotfiles [command]"
+    echo ""
+    echo "Commands:"
+    echo "  sync     Pull latest changes and re-stow configuration"
+    echo "  update   Pull changes, re-stow, and run full system updates"
+    echo "  status   Show git status of the myLinux repository"
+    echo "  diff     Show unstaged changes in the myLinux repository"
+    echo "  cd       Print path to myLinux repository (eval \"cd \$(dotfiles cd)\")"
+    echo "  help     Show this help message"
+}
+
+case "$1" in
+    sync)
+        "$REPO_DIR/scripts/sync.sh"
+        ;;
+    update)
+        "$REPO_DIR/scripts/sync.sh" --update
+        ;;
+    status)
+        git -C "$REPO_DIR" status
+        ;;
+    diff)
+        git -C "$REPO_DIR" diff
+        ;;
+    cd)
+        echo "$REPO_DIR"
+        ;;
+    help|--help|-h|"")
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1"
+        usage
+        exit 1
+        ;;
+esac

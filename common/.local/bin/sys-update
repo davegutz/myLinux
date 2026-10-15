@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# sys-update - Cross-distribution package and system updater
+# Works on Arch Linux, CachyOS, Lubuntu, Pop!_OS, and Ubuntu
+
+set -e
+
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}==============================================${NC}"
+echo -e "${BLUE}   Starting System & Package Update...        ${NC}"
+echo -e "${BLUE}==============================================${NC}"
+
+if [ -f /etc/arch-release ]; then
+    echo -e "${GREEN}==> Detected Arch-based system (CachyOS)...${NC}"
+    if command -v paru >/dev/null 2>&1; then
+        echo "Using paru (AUR helper)..."
+        paru -Syu
+    elif command -v yay >/dev/null 2>&1; then
+        echo "Using yay (AUR helper)..."
+        yay -Syu
+    else
+        sudo pacman -Syu
+    fi
+elif [ -f /etc/debian_version ]; then
+    echo -e "${GREEN}==> Detected Debian/Ubuntu-based system (Lubuntu/Ubuntu)...${NC}"
+    sudo apt update
+    sudo apt upgrade -y
+    sudo apt autoremove -y
+else
+    echo -e "${YELLOW}Warning: Unknown distribution. Skipping native package manager update.${NC}"
+fi
+
+# Flatpak update if installed
+if command -v flatpak >/dev/null 2>&1; then
+    echo -e "${GREEN}==> Updating Flatpaks...${NC}"
+    flatpak update -y
+fi
+
+echo -e "${GREEN}==============================================${NC}"
+echo -e "${GREEN}   System update completed successfully!      ${NC}"
+echo -e "${GREEN}==============================================${NC}"
