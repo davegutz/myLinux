@@ -32,6 +32,8 @@ mkdir -p "$HOME/bin"
 # 3. Re-stow configurations
 echo -e "${GREEN}==> Re-stowing dotfiles into $HOME...${NC}"
 stow -v -R -t "$HOME" common
+chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
+chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py 2>/dev/null || true
 
 # 4. Optional full system package update
 if [[ "$*" == *"--update"* ]]; then

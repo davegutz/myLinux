@@ -21,6 +21,13 @@ myLinux/
 │   ├── .bashrc                           # Unified interactive bash setup (git-aware prompt, colors, paths)
 │   ├── .bash_aliases                     # Global aliases, shortcuts, and repo quick-jumps
 │   ├── .tmux.conf                        # Unified tmux multiplexer theme and configuration
+│   ├── bin/                              # User binaries stowed to ~/bin (in PATH)
+│   │   ├── encodeLinux.sh                # DVD transcode automation (outputs to ~/Videos/encodeLinux)
+│   │   ├── Fast 480p30.json              # HandBrakeCLI encoding preset
+│   │   ├── fetch_subtitles.py            # Automated English subtitle fetcher
+│   │   ├── jobStat.sh                    # Transcode progress status reporter
+│   │   ├── run_time.sh                   # Video duration / ffprobe inspector
+│   │   └── stripit.sh                    # Video filename sanitization tool
 │   ├── .config/
 │   │   ├── alacritty/
 │   │   │   └── alacritty.toml            # Alacritty terminal settings (Catppuccin Mocha, JetBrains Mono)
@@ -78,6 +85,7 @@ Once deployed, the following utilities and aliases are available in any terminal
 
 | Command / Alias | Action |
 |-----------------|--------|
+| `encodeLinux.sh` | Transcodes DVD discs to `.m4v` and fetches `.en.srt` subtitles into `~/Videos/encodeLinux` |
 | `mylinux-sync` / `dotfiles sync` | Pulls latest Git commits and re-stows all configurations |
 | `mylinux-update` / `dotfiles update` | Pulls Git changes, re-stows, and runs a full system update (`pacman`/`paru` or `apt` + `flatpaks`) |
 | `sys-update` | Runs the distribution-aware system updater directly |

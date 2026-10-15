@@ -75,8 +75,9 @@ echo "Symlinking common configurations via GNU Stow..."
 cd "$DOTFILES_DIR"
 stow -v -R -t "$HOME" common
 
-# Ensure scripts in ~/.local/bin are executable
+# Ensure scripts in ~/.local/bin and ~/bin are executable
 chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
+chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py 2>/dev/null || true
 
 # 4. Install and configure fonts
 echo -e "\n${GREEN}[Step 4/5] Installing and verifying fonts...${NC}"

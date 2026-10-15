@@ -23,6 +23,14 @@ MANAGED_FILES=(
     ".config/fastfetch/config.jsonc"
     ".config/gtk-3.0/settings.ini"
     ".config/gtk-4.0/settings.ini"
+    "bin/encodeLinux.sh"
+    "bin/Fast 480p30.json"
+    "bin/fetch_subtitles.py"
+    "bin/jobStat.sh"
+    "bin/run_time.sh"
+    "bin/stripit.sh"
+    "bin/renameit.sh"
+    "bin/renameit_check.sh"
 )
 
 backed_up_count=0
