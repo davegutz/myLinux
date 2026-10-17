@@ -1,7 +1,49 @@
 #!/bin/bash
-# rclone mount gdrive: ~/gdrive &
-rclone mount gdrive: ~/gdrive   --vfs-cache-mode full   --vfs-cache-max-size 50G   --vfs-cache-max-age 24h   --dir-cache-time 1000h   --drive-chunk-size 128M   --buffer-size 64M   --poll-interval 15s   --multi-thread-streams 4   --tpslimit 5   --tpslimit-burst 5   --rc   --rc-no-auth   --daemon   &
+MOUNT_DIR="$HOME/gdrive"
 
-# Background folder content listing
-nohup rclone rc vfs/refresh recursive=true --fast-list &
+# 1. Check if already mounted
+if mountpoint -q "$MOUNT_DIR"; then
+    echo "Google Drive is already mounted at $MOUNT_DIR."
+    
+    # If the active mount has remote control (--rc) enabled, refresh cache
+    if rclone rc core/version >/dev/null 2>&1; then
+        echo "Refreshing VFS directory cache in background..."
+        rclone rc vfs/refresh recursive=true --fast-list >/dev/null 2>&1 &
+    else
+        echo "Note: The active rclone process was started without remote control (--rc)."
+        echo "To restart with full cache control: fusermount -u $MOUNT_DIR && Rclone"
+    fi
+    exit 0
+fi
+
+# 2. Ensure target mount directory exists
+mkdir -p "$MOUNT_DIR"
+
+# 3. Mount Google Drive (--daemon handles backgrounding; do not append '&')
+echo "Mounting Google Drive to $MOUNT_DIR..."
+rclone mount gdrive: "$MOUNT_DIR" \
+    --vfs-cache-mode full \
+    --vfs-cache-max-size 50G \
+    --vfs-cache-max-age 24h \
+    --dir-cache-time 1000h \
+    --drive-chunk-size 128M \
+    --buffer-size 64M \
+    --poll-interval 15s \
+    --multi-thread-streams 4 \
+    --tpslimit 5 \
+    --tpslimit-burst 5 \
+    --rc \
+    --rc-no-auth \
+    --daemon
+
+# 4. Wait briefly for the daemon to start listening on RC port
+sleep 1
+
+# 5. Background folder content listing (warms directory cache)
+if rclone rc core/version >/dev/null 2>&1; then
+    echo "Warming VFS directory cache in background..."
+    rclone rc vfs/refresh recursive=true --fast-list >/dev/null 2>&1 &
+fi
+
+echo "Google Drive mounted successfully."
 
