@@ -1,0 +1,594 @@
+[Import csv,transaction - m&t]
+Name=m&t
+SkipStartLines=0
+SkipEndLines=0
+SkipAltLines=false
+CsvFormat=true
+Separators=,
+DateFormat=2
+CurrencyFormat=0
+Encoding=UTF-8
+MultiSplit=false
+BaseAccountGuid=81d2909422804bfdaed7ccacb31c74b9
+BaseAccount=Assets:Katherine Checking *1871
+ColumnTypes=None;Date;Description;Amount;Amount;None;
+
+[dialogs/import/generic_matcher/account_matcher]
+column_order=name;type;commodity;account-code;description;lastnum;present;present_report;balance;balance_report;balance-period;cleared;cleared_report;reconciled;reconciled_report;last-recon-date;future_min;future_min_report;total;total_report;total-period;account-color;account-balance-limit;notes;tax-info;hidden;placeholder;opening-balance;online-id;
+type_visible=true
+commodity_visible=false
+commodity_width=0
+account-code_visible=false
+account-code_width=0
+description_visible=false
+description_width=0
+lastnum_visible=false
+lastnum_width=0
+present_visible=false
+present_width=0
+present_report_visible=false
+present_report_width=0
+balance_visible=false
+balance_width=0
+balance_report_visible=false
+balance_report_width=0
+balance-period_visible=false
+balance-period_width=0
+cleared_visible=false
+cleared_width=0
+cleared_report_visible=false
+cleared_report_width=0
+reconciled_visible=false
+reconciled_width=0
+reconciled_report_visible=false
+reconciled_report_width=0
+earliest-date_visible=false
+earliest-date_width=0
+last-recon-date_visible=false
+last-recon-date_width=0
+future_min_visible=false
+future_min_width=0
+future_min_report_visible=false
+future_min_report_width=0
+total_visible=false
+total_width=0
+total_report_visible=false
+total_report_width=0
+total-period_visible=false
+total-period_width=0
+account-color_visible=false
+account-color_width=0
+account-balance-limit_visible=false
+account-balance-limit_width=0
+notes_visible=false
+notes_width=0
+tax-info_visible=false
+tax-info_width=0
+hidden_visible=false
+placeholder_visible=false
+opening-balance_visible=false
+online-id_visible=true
+name_width=342
+
+[Import csv,transaction - chase]
+Name=chase
+SkipStartLines=1
+SkipEndLines=0
+SkipAltLines=false
+CsvFormat=true
+Separators=,
+DateFormat=2
+CurrencyFormat=0
+Encoding=UTF-8
+MultiSplit=false
+BaseAccountGuid=1985603fa823407da8b7ef7650e27315
+BaseAccount=Liabilities:Chase Prime CC D *8079
+ColumnTypes=None;Date;Description;None;None;Amount;None;
+
+[Register b6e86c11cc604080a2dd660440f44556]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 1e902aeedf464ae4a6e1dcfcaca6d1aa]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register f37a11f9c3064383a4d8f7165c104473]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 00a5935cbc2649e791a4b97d39889458]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 71406c80efdb4eceac71f288599cd2a5]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register f6475971db07441799577246d86ea540]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 29a6c6966dd14b5ab05f5ae05fa9e307]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 11cc83c0e3d841a9a4b8be3babb709c9]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 739a08d51d1449d6806e02724052b9b2]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register b1ed621364194f24821ee61ae5a2b9dc]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register d0f998541f664489916aed6c78699ec8]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 00000000000000000000000000000000]
+date_width=122
+trans-num_width=61
+reconcile_width=25
+transfer_width=260
+debit_width=105
+credit_width=105
+reg-run-balance_width=105
+
+[Register 3f30bb07ac15401587b4aa40a3260ca8]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 77324f39cd8946e4b49ccf466bc2642f]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register e4a5f22c443f43328ee10caeb00f3676]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 1985603fa823407da8b7ef7650e27315]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 61058be96f8045f280abf29d8e27cf9c]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register bc50095fe04a457397b416f136a12c21]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 81d2909422804bfdaed7ccacb31c74b9]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register f96b17cac3b54fa185bfa0d257c00aee]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 9843e4126f9f4f5898dd883df6ba1d66]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 8902cacf17234bc3a09ca5e0c18aa7ba]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 1409566365cf41e280e19e35e33ee732]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Top]
+BookGuid=2263eafe442b4bc0a25796a4691b2bef
+WindowCount=1
+
+[Account Hierarchy]
+Account_Types=-1
+Show_Hidden=false
+Show_ZeroTotal=true
+Show_Unused=true
+column_order=name;type;commodity;account-code;description;lastnum;present;present_report;balance;balance_report;balance-period;cleared;cleared_report;reconciled;reconciled_report;last-recon-date;future_min;future_min_report;total;total_report;total-period;account-color;account-balance-limit;notes;tax-info;hidden;placeholder;opening-balance;
+name_width=455
+type_visible=false
+type_width=0
+commodity_visible=false
+commodity_width=0
+account-code_visible=false
+account-code_width=0
+description_visible=true
+lastnum_visible=false
+lastnum_width=0
+present_visible=false
+present_width=0
+present_report_visible=false
+present_report_width=0
+balance_visible=false
+balance_width=0
+balance_report_visible=false
+balance_report_width=0
+balance-period_visible=false
+balance-period_width=0
+cleared_visible=false
+cleared_width=0
+cleared_report_visible=false
+cleared_report_width=0
+reconciled_visible=false
+reconciled_width=0
+reconciled_report_visible=false
+reconciled_report_width=0
+earliest-date_visible=false
+earliest-date_width=0
+last-recon-date_visible=false
+last-recon-date_width=0
+future_min_visible=false
+future_min_width=0
+future_min_report_visible=false
+future_min_report_width=0
+total_visible=true
+total_report_visible=false
+total_report_width=0
+total-period_visible=false
+total-period_width=0
+account-color_visible=false
+account-color_width=0
+account-balance-limit_visible=false
+account-balance-limit_width=0
+notes_visible=false
+notes_width=0
+tax-info_visible=false
+tax-info_width=0
+hidden_visible=false
+placeholder_visible=false
+opening-balance_visible=false
+
+[Import csv,transaction - usaa]
+Name=usaa
+SkipStartLines=1
+SkipEndLines=0
+SkipAltLines=false
+CsvFormat=true
+Separators=,
+DateFormat=0
+CurrencyFormat=0
+Encoding=UTF-8
+MultiSplit=false
+BaseAccountGuid=77324f39cd8946e4b49ccf466bc2642f
+BaseAccount=Liabilities:Visa Plat USAA *9411
+ColumnTypes=Date;Description;None;None;Amount (Negated);None;
+
+[Register 2fb41127bb414fafb1d5a7b60e402676]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 48e2b3311a944d80be03d1e084d96524]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 2e6cff791e95484aabb676a57747d0d8]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 5e6ed2dfcd6f49d7bb1f25a42621629c]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 0bf184b3ab5346068341d89bca9e0a6a]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register e14ef47c911247d989dfd1190b708b85]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 76ca6cd106284350bb032c293c916f1d]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 0987c48d7ac34811972b53a84e03e62b]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 8bd8731cd861413c82ac60d37c6e22b8]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Import csv,transaction - Taylor]
+Name=Taylor
+SkipStartLines=1
+SkipEndLines=0
+SkipAltLines=false
+CsvFormat=true
+Separators=,
+DateFormat=2
+CurrencyFormat=0
+Encoding=UTF-8
+MultiSplit=false
+BaseAccountGuid=61ca0857d6634aef84ed2d84403ee971
+BaseAccount=Joint Expenses:Taylor
+ColumnTypes=Date;Description;Memo;Notes;Amount (Negated);Amount;
+
+[Register 61ca0857d6634aef84ed2d84403ee971]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Register 786ee2a9ea624ca2af512f4e1f528a88]
+date_width=122
+num_width=61
+reconcile_width=25
+balance_width=105
+transfer_width=260
+debit_width=105
+credit_width=105
+
+[Window 1]
+PageCount=11
+FirstPage=1
+PageOrder=10;1;2;3;4;5;6;7;9;8;11;
+WindowPosition=0;0;
+WindowGeometry=948;987;
+WindowMaximized=false
+ToolbarVisible=true
+SummarybarVisible=true
+StatusbarVisible=true
+
+[Page 1]
+PageType=GncPluginPageAccountTree
+PageName=Accounts
+AccountTypes=-1
+ShowHidden=false
+ShowZeroTotal=true
+ShowUnused=true
+SelectedAccount=Assets:Katherine Checking *1871
+OpenAccount1=Assets
+OpenAccount2=Liabilities
+NumberOfOpenAccounts=2
+
+[Page 2]
+PageType=GncPluginPageRegister
+PageName=Imbalance-USD
+RegisterType=Account
+AccountName=Imbalance-USD
+AccountGuid=786ee2a9ea624ca2af512f4e1f528a88
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 3]
+PageType=GncPluginPageRegister
+PageName=Chase Prime CC D *8079
+RegisterType=Account
+AccountName=Liabilities:Chase Prime CC D *8079
+AccountGuid=1985603fa823407da8b7ef7650e27315
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 4]
+PageType=GncPluginPageRegister
+PageName=Chase Prime CC K *7396
+RegisterType=Account
+AccountName=Liabilities:Chase Prime CC K *7396
+AccountGuid=61058be96f8045f280abf29d8e27cf9c
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 5]
+PageType=GncPluginPageRegister
+PageName=Visa Plat USAA *9411
+RegisterType=Account
+AccountName=Liabilities:Visa Plat USAA *9411
+AccountGuid=77324f39cd8946e4b49ccf466bc2642f
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 6]
+PageType=GncPluginPageRegister
+PageName=FREE REWARDS CK, *2680
+RegisterType=Account
+AccountName=Assets:FREE REWARDS CK, *2680
+AccountGuid=1409566365cf41e280e19e35e33ee732
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 7]
+PageType=GncPluginPageReport
+PageName=Transaction Report
+SchemeOptions=(let ((options (gnc:report-template-new-options/report-guid "2fe3b9833af044abb929a88d5a59620f" "Transaction Report"))) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Accounts")))   ((lambda (o) (if o (gnc:option-set-value o '("61058be96f8045f280abf29d8e27cf9c" "81d2909422804bfdaed7ccacb31c74b9")))) option)) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Filter Type")))   ((lambda (o) (if o (gnc:option-set-value o 'include))) option)) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Filter By…")))   ((lambda (o) (if o (gnc:option-set-value o '("1e902aeedf464ae4a6e1dcfcaca6d1aa" "897fa513d8164acea5366efcd8f832db" "a5532517917e4102a1ec6cb096d45127" "f37a11f9c3064383a4d8f7165c104473" "d2c41c9491534a29aecc7a6c1f51b953" "9ede83c0256545efbe0b7fad4d3e9945" "4b0d69aaeac94921b94ed56313410965" "429cce7256b84162978501e4e11376e5" "e563c144b12645e5b73ea533652d7cdd" "b501593e1b4347f89330dea1e2e46e3f" "f49a1708bd654f5fa5bed5c20515f496" "8471ad10ecdb4bc68b7e483b9f7903e7" "ac46405f887c4bbfa58621a5806aef72" "235c765f683147e0961910ed86694467" "096346a2ed3140e1bb0d995f32cc2dcb" "879a7dc925c8438c8462194f1aac2704" "a3e18bb931764c77a10bc18d1fbb0752" "998649094b1c488c9ca2efd54fe2b68e" "c2f8dfffdfcb4716954127c7807ecb3f" "91ec55258e85415689c35f9cd1ef39dd" "ba20b52664a641b0a77a7eb5ec05da8d" "639cf14a761346e3839d04a69d3a82f3" "9e467f223b1d4b75aa42aa692063b39b" "61ca0857d6634aef84ed2d84403ee971" "2a212c1ec6074dd7b883b85fc280eb14" "38af5b3e9e15424d9944caf9c5fcf757" "d3831052f12c451ba2060f121ec80d0d" "ce52287ec9a6480d8b0837cc70454f72" "cb579055228840c8a6ad4b4a57b078cd" "00f29e67329c4d3d8ea4b07cc8427b58" "fe91a151c2d74833923c05b40b70e007" "355048825680489f8e60d2e9f89321e4" "739a08d51d1449d6806e02724052b9b2" "1f34b1be3434483ba764986110f82c97" "3fa8d5973fcc434b97d98ffb02aa726a" "59edd004797b469393da26deedd9a6a4" "41c40d550c5f46d180d2284b0c515292" "1ccbdc3d386543e0819c23a1297308bc" "728f0c22b46a4cad86a5e5aae646c3d4" "079094f32828408480281608db6afab8" "550f6f9d71894399a1a6f4d2c950772f" "ed4b9f248d38461180d1407e4e244364" "46e28d60481e479a80b198225cd523f3" "a06aeafd01f447379beaf089c30ebfef" "2d61821f6679462193fc229f87a85a13" "af239feec37b4116a9032f3bed37f44a" "8ac968aa09bc40e5a0f012aaa99cc93b" "7394828652c9499ab9619c771772043c" "374480d657a642d195bfdacc62be596a" "857c535371af4d8ea6793b4813d02a41" "73e451bc49dc4810a5fc5e4a0efbaf6f" "f6475971db07441799577246d86ea540" "f43f5498ebb4442484c3708f5d4025b3" "d4ce9a18d1a544f8b3ffa9d60599341a" "0bf184b3ab5346068341d89bca9e0a6a" "9d5654edb2c547808f61f2be6df1bf34" "3855bc0d0b014d59a837f75a1ee165f3" "1e2194f2c44f497d8190eea9e2a00f21" "4613374151d44f77a2a5c4eb25f40571" "9f3b036711d64415884c8a8976fb5f51" "3406df2a89a74cf7ad35aa56b2062800" "1c0804736b904d3bb1d243c0ac1fa972" "599666789bda4c529ec752f959189a4a")))) option)) (let ((option (gnc:lookup-option options                                  "General"                                  "Start Date")))   ((lambda (o) (if o (gnc:option-set-value o '(absolute . 1789556340)))) option)) (let ((option (gnc:lookup-option options                                  "General"                                  "End Date")))   ((lambda (o) (if o (gnc:option-set-value o '(absolute . 1790333940)))) option))   (gnc:restore-report-by-guid-with-custom-template 0 "2fe3b9833af044abb929a88d5a59620f" "Transaction Report" "" options) )
+
+[Page 8]
+PageType=GncPluginPageRegister
+PageName=Katherine PLUS SAVINGS *2666
+RegisterType=Account
+AccountName=Assets:Katherine PLUS SAVINGS *2666
+AccountGuid=3f30bb07ac15401587b4aa40a3260ca8
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 9]
+PageType=GncPluginPageRegister
+PageName=Joint Checking *4619
+RegisterType=Account
+AccountName=Assets:Joint Checking *4619
+AccountGuid=bc50095fe04a457397b416f136a12c21
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 10]
+PageType=GncPluginPageRegister
+PageName=Katherine Checking *1871
+RegisterType=Account
+AccountName=Assets:Katherine Checking *1871
+AccountGuid=81d2909422804bfdaed7ccacb31c74b9
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 11]
+PageType=GncPluginPageRegister
+PageName=Taylor
+RegisterType=Account
+AccountName=Joint Expenses:Taylor
+AccountGuid=61ca0857d6634aef84ed2d84403ee971
+RegisterStyle=Ledger
+DoubleLineMode=false
