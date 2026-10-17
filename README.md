@@ -26,6 +26,7 @@ myLinux/
 │   │   ├── Fast 480p30.json              # HandBrakeCLI encoding preset
 │   │   ├── fetch_subtitles.py            # Automated English subtitle fetcher
 │   │   ├── jobStat.sh                    # Transcode progress status reporter
+│   │   ├── Rclone                        # Google Drive mount and VFS cache refresh automation
 │   │   ├── run_time.sh                   # Video duration / ffprobe inspector
 │   │   └── stripit.sh                    # Video filename sanitization tool
 │   ├── .config/
@@ -38,10 +39,15 @@ myLinux/
 │   │   └── gtk-4.0/
 │   │       └── settings.ini              # GTK-4 dark mode enforcement
 │   └── .local/
-│       └── bin/
-│           ├── gg                        # Launcher for Dave G's custom git_gui from myComputer
-│           ├── sys-update                # Universal package & flatpak updater (Arch + Ubuntu)
-│           └── dotfiles                  # myLinux repository management CLI
+│       ├── bin/
+│       │   ├── gg                        # Launcher for Dave G's custom git_gui from myComputer
+│       │   ├── sys-update                # Universal package & flatpak updater (Arch + Ubuntu)
+│       │   └── dotfiles                  # myLinux repository management CLI
+│       └── share/
+│           └── gnucash/                  # GnuCash custom stylesheets and book settings
+│               ├── books/
+│               │   └── Gutz_joint.gnucash.gcm
+│               └── stylesheets-2.0
 ├── scripts/
 │   ├── bootstrap.sh                      # Main idempotent onboarding & setup script
 │   ├── sync.sh                           # Sync changes from Git, re-stow, and optional package upgrade
@@ -93,6 +99,7 @@ Once deployed, the following utilities and aliases are available in any terminal
 | `reload` | Reloads `~/.bashrc` in the active shell |
 | `suspend` | Calls `suspend_until 14:30` |
 | `movmov` | Moves staged media to `/media/daveg/Lib/Movies` |
+| `Rclone` | Mounts Google Drive (`gdrive:`) to `~/gdrive` with 50GB VFS cache and warms directory tree |
 | `cdmylinux` / `cdcomp` | Quickly changes directory to `myLinux` or `myComputer` |
 | `gs`, `ga`, `gc`, `gp`, `gl`, `gd` | Standard Git shortcuts (`status`, `add`, `commit`, `push`, `pull`, `diff`) |
 

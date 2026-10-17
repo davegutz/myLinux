@@ -69,6 +69,7 @@ mkdir -p "$HOME/.config/gtk-4.0"
 mkdir -p "$HOME/.local/bin"
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/.local/share/fonts"
+mkdir -p "$HOME/.local/share/gnucash/books"
 
 # Deploy common dotfiles via GNU Stow
 echo "Symlinking common configurations via GNU Stow..."
@@ -77,7 +78,7 @@ stow -v -R -t "$HOME" common
 
 # Ensure scripts in ~/.local/bin and ~/bin are executable
 chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
-chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py 2>/dev/null || true
+chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py "$HOME/bin/Rclone" 2>/dev/null || true
 
 # 4. Install and configure fonts
 echo -e "\n${GREEN}[Step 4/5] Installing and verifying fonts...${NC}"

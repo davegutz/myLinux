@@ -1,0 +1,7 @@
+#!/bin/bash
+# rclone mount gdrive: ~/gdrive &
+rclone mount gdrive: ~/gdrive   --vfs-cache-mode full   --vfs-cache-max-size 50G   --vfs-cache-max-age 24h   --dir-cache-time 1000h   --drive-chunk-size 128M   --buffer-size 64M   --poll-interval 15s   --multi-thread-streams 4   --tpslimit 5   --tpslimit-burst 5   --rc   --rc-no-auth   --daemon   &
+
+# Background folder content listing
+nohup rclone rc vfs/refresh recursive=true --fast-list &
+

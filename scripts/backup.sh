@@ -31,6 +31,9 @@ MANAGED_FILES=(
     "bin/stripit.sh"
     "bin/renameit.sh"
     "bin/renameit_check.sh"
+    "bin/Rclone"
+    ".local/share/gnucash/stylesheets-2.0"
+    ".local/share/gnucash/books/Gutz_joint.gnucash.gcm"
 )
 
 backed_up_count=0
