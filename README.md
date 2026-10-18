@@ -4,6 +4,70 @@ A centralized dotfiles and configuration manager designed to keep diverse Linux 
 
 ---
 
+## ⚡ Quickstart
+
+### 1. New Machine Onboarding (CachyOS or Lubuntu)
+To set up a fresh Linux installation with full environment parity, configurations, and desktop widgets:
+
+```bash
+# 1. Clone the repository into your GitHub directory:
+mkdir -p ~/Documents/GitHub && cd ~/Documents/GitHub
+git clone https://github.com/davegutz/myLinux.git
+cd myLinux
+
+# 2. Run the automated bootstrap manager:
+./scripts/bootstrap.sh
+
+# 3. Reload your terminal shell:
+source ~/.bashrc
+```
+
+---
+
+### 2. Refreshing & Synchronizing Existing Machines
+Whenever you make updates on one PC (e.g. Lubuntu or CachyOS), sync them seamlessly across all other machines:
+
+```bash
+# On the computer with new changes:
+git push
+
+# On your other computer(s):
+dotfiles sync         # (or 'mylinux-sync')
+```
+
+> [!TIP]
+> **What `dotfiles sync` does automatically:**
+> * Pulls latest commits (`git pull --rebase`).
+> * Pre-creates any required directories (`~/.config/gnucash`, `~/Desktop`, `~/.local/share/applications`).
+> * Re-stows configurations and desktop shortcuts cleanly via GNU Stow.
+> * Preserves permissions (`chmod +x` on scripts and desktop launchers).
+> * Runs `update-desktop-database` so application menus and desktop icons refresh immediately without requiring a logout or reboot.
+
+```bash
+# Useful inspection commands on any machine:
+dotfiles check            # See if remote GitHub updates are waiting without pulling
+gnucash-refresh --status  # Check GnuCash book & spreadsheet sync states and cloud locks
+```
+
+---
+
+### 3. GnuCash Joint Desktop Widget & Process Monitor
+The desktop launcher (`~/Desktop/GnuCash-Joint.desktop`) manages bidirectional synchronization with Google Drive (`gdrive:Finance remote/Gutz_joint_gnucash`):
+
+* **Launch**: Double-click **GnuCash (Joint)** on your desktop or run `gnucash-refresh` in any terminal.
+* **Integrated Process Monitor**: Automatically opens inside your terminal emulator (`konsole` on CachyOS, `qterminal` on Lubuntu) with live PID display and timestamped save logs.
+* **Minimize**: You can minimize the monitor window to your taskbar/panel while working; desktop notifications keep you informed on every save.
+* **Auto-Sync on Save (Ctrl+S)**: Every local save is debounced (5s) and pushed to Google Drive in the background.
+* **Closing**: Closing the monitor window (or GnuCash) triggers a final exit sync, releases the cloud `.session_lock`, and leaves zero zombie processes.
+* **Right-Click Desktop Menu**:
+  * *Launch Silently (No Terminal)*
+  * *Refresh from Google Drive Only*
+  * *Open GnuCash Folder*
+  * *Open Budget Spreadsheets (.ods)*
+  * *Release Cloud Lock*
+
+---
+
 ## Key Objectives
 
 1. **Visual Parity**: Maintain an identical look and feel (terminal colors, fonts, prompt, window padding, GTK/Qt dark themes) across all laptops, workstations, and dual-boot instances.
@@ -251,10 +315,12 @@ A desktop widget / launcher and bidirectional synchronization engine maintained 
 - **Cloud Session Lock (`.session_lock`)**: Prevents conflicting edits between dual-boot or separate Linux distributions. Alerts the user if another machine currently has GnuCash open and offers override/cancel options.
 - **Safety Pre-Backups**: Automatically creates timestamped copies of local files in `~/Documents/Gutz_joint_gnucash/.backups/` and cloud backups in `gdrive:.../.backups/` before applying changes (retaining 10 backups).
 - **Concurrency & Stale Lock Protection**: Detects local running instances and cleans up stale `.LCK` files left by power loss or crashes.
+- **Integrated Process Monitor**: Automatically launches inside your desktop's terminal emulator (`konsole` on CachyOS, `qterminal` on Lubuntu) with live PID display and timestamped save logs. Minimize anytime while working, or close the terminal to safely save and exit.
 - **Desktop Widget & Actions**:
   - Direct launcher on the Desktop (`~/Desktop/GnuCash-Joint.desktop`).
   - System application menu launcher (`~/.local/share/applications/GnuCash-Joint.desktop`).
   - Right-click desktop actions:
+    - **Launch Silently (No Terminal)** (runs background sync without a visible window)
     - **Refresh from Google Drive Only** (pull without launching)
     - **Open GnuCash Folder** (opens local directory in file manager)
     - **Open Budget Spreadsheets** (opens both `.ods` files in LibreOffice Calc)
@@ -288,6 +354,12 @@ SYNC_ON_SAVE=true
 DEBOUNCE_SECONDS=5
 SYNC_ON_EXIT=true
 NOTIFY=true
+
+# Terminal process monitor settings
+TERMINAL_MONITOR=true
+HOLD_TERMINAL=true
+HOLD_SECONDS=3
+HOLD_ON_ERROR=true
 ```
 Create `~/.config/gnucash/refresh-joint.conf.local` for machine-specific overrides.
 
@@ -295,6 +367,12 @@ Create `~/.config/gnucash/refresh-joint.conf.local` for machine-specific overrid
 ```bash
 # Check current local vs remote synchronization & cloud lock status:
 gnucash-refresh --status
+
+# Launch with integrated process monitor:
+gnucash-refresh
+
+# Run silently in background without terminal window:
+gnucash-refresh --no-terminal
 
 # Simulate refresh without writing files:
 gnucash-refresh --dry-run
