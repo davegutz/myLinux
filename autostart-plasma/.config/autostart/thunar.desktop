@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Thunar
+GenericName=File Manager
+Comment=Launch Thunar file manager on login
+Exec=/usr/bin/thunar
+Icon=org.xfce.thunar
+Terminal=false
+Type=Application
+Version=1.0
+OnlyShowIn=KDE;

@@ -32,6 +32,8 @@ myLinux/
 │   ├── .config/
 │   │   ├── alacritty/
 │   │   │   └── alacritty.toml            # Alacritty terminal settings (Catppuccin Mocha, JetBrains Mono)
+│   │   ├── autostart/
+│   │   │   └── rclone.desktop            # Universal Google Drive mount on login (~/bin/Rclone)
 │   │   ├── fastfetch/
 │   │   │   └── config.jsonc              # Fastfetch system information card
 │   │   ├── gtk-3.0/
@@ -42,12 +44,36 @@ myLinux/
 │       ├── bin/
 │       │   ├── gg                        # Launcher for Dave G's custom git_gui from myComputer
 │       │   ├── sys-update                # Universal package & flatpak updater (Arch + Ubuntu)
-│       │   └── dotfiles                  # myLinux repository management CLI
+│       │   └── dotfiles                  # myLinux repository management CLI (sync, daemon, autostart)
 │       └── share/
 │           └── gnucash/                  # GnuCash custom stylesheets and book settings
 │               ├── books/
 │               │   └── Gutz_joint.gnucash.gcm
 │               └── stylesheets-2.0
+├── autostart-cosmic/                     # CachyOS COSMIC desktop startup files (stowed to $HOME)
+│   └── .config/
+│       └── autostart/
+│           └── caffeine.desktop          # Idle sleep / screensaver prevention for COSMIC
+├── autostart-gnome/                      # Lubuntu / Ubuntu GNOME startup files (stowed to $HOME)
+│   └── .config/
+│       └── autostart/
+│           └── gnome-session-init.desktop # GNOME-specific session autostart hooks
+├── autostart-plasma/                     # Lubuntu KDE Plasma startup files (stowed to $HOME)
+│   └── .config/
+│       └── autostart/
+│           ├── firefox.desktop           # Firefox autostart for Plasma session
+│           └── thunar.desktop            # File manager autostart for Plasma session
+├── rclone-backup/                        # Daily automated rclone copy daemon (stowed to $HOME)
+│   ├── .config/
+│   │   ├── rclone/
+│   │   │   └── daily-copy.conf           # Config file for daily copy sources, destination, and flags
+│   │   └── systemd/
+│   │       └── user/
+│   │           ├── rclone-daily-backup.service # Oneshot systemd user service executing copy
+│   │           └── rclone-daily-backup.timer   # Systemd user timer triggering daily (Persistent=true)
+│   └── .local/
+│       └── bin/
+│           └── rclone-daily-backup       # Safe copy runner with flock, timeout, logs, & notifications
 ├── scripts/
 │   ├── bootstrap.sh                      # Main idempotent onboarding & setup script
 │   ├── sync.sh                           # Sync changes from Git, re-stow, and optional package upgrade
@@ -92,8 +118,10 @@ Once deployed, the following utilities and aliases are available in any terminal
 | Command / Alias | Action |
 |-----------------|--------|
 | `encodeLinux.sh` | Transcodes DVD discs to `.m4v` and fetches `.en.srt` subtitles into `~/Videos/encodeLinux` |
-| `mylinux-sync` / `dotfiles sync` | Pulls latest Git commits and re-stows all configurations |
+| `mylinux-sync` / `dotfiles sync` | Pulls latest Git commits and re-stows configurations & active autostart profile |
 | `mylinux-update` / `dotfiles update` | Pulls Git changes, re-stows, and runs a full system update (`pacman`/`paru` or `apt` + `flatpaks`) |
+| `dotfiles autostart [DE]` | Stow or switch autostart profile (`cosmic`, `gnome`, `plasma`, `detect`, or `status`) |
+| `dotfiles daemon [action]` | Control daily rclone copy daemon (`status`, `enable`, `disable`, `run`, `logs`) |
 | `sys-update` | Runs the distribution-aware system updater directly |
 | `gg` | Launches Dave G's custom `git_gui.py` GUI tool from `myComputer` |
 | `reload` | Reloads `~/.bashrc` in the active shell |
@@ -102,6 +130,103 @@ Once deployed, the following utilities and aliases are available in any terminal
 | `Rclone` | Mounts Google Drive (`gdrive:`) to `~/gdrive` with 50GB VFS cache and warms directory tree |
 | `cdmylinux` / `cdcomp` | Quickly changes directory to `myLinux` or `myComputer` |
 | `gs`, `ga`, `gc`, `gp`, `gl`, `gd` | Standard Git shortcuts (`status`, `add`, `commit`, `push`, `pull`, `diff`) |
+
+---
+
+## Auto-Startup Management Across Desktop Environments
+
+Linux desktop environments follow the [XDG Desktop Autostart Specification](https://specifications.freedesktop.org/autostart-spec/latest/). Files in `~/.config/autostart/*.desktop` are read and launched on user login.
+
+GNU Stow manages autostart entries modularly so you can maintain common items across all machines while isolating DE-specific applications:
+
+1. **Shared Autostart (`common/`)**:
+   - `common/.config/autostart/rclone.desktop`: Mounts Google Drive (`~/bin/Rclone`) to `~/gdrive` across all systems.
+2. **CachyOS COSMIC (`autostart-cosmic/`)**:
+   - `autostart-cosmic/.config/autostart/caffeine.desktop`: Desktop idle lock / sleep inhibitor.
+   - Restricted with `OnlyShowIn=COSMIC;`.
+3. **Lubuntu GNOME (`autostart-gnome/`)**:
+   - `autostart-gnome/.config/autostart/gnome-session-init.desktop`: GNOME session startup hooks.
+   - Restricted with `OnlyShowIn=GNOME;`.
+4. **Lubuntu KDE Plasma (`autostart-plasma/`)**:
+   - `autostart-plasma/.config/autostart/firefox.desktop`: Auto-launches Firefox on session login.
+   - `autostart-plasma/.config/autostart/thunar.desktop`: File manager helper.
+   - Restricted with `OnlyShowIn=KDE;`.
+
+### Stowing or Switching Autostart Profiles
+- **Automatic**: `scripts/bootstrap.sh` and `scripts/sync.sh` automatically detect `$XDG_CURRENT_DESKTOP` or `$DESKTOP_SESSION` and stow the matching profile.
+- **Manual CLI**:
+  ```bash
+  # Check current stowed autostart links:
+  dotfiles autostart status
+
+  # Switch or re-stow for a specific DE:
+  dotfiles autostart plasma
+  dotfiles autostart cosmic
+  dotfiles autostart gnome
+  ```
+
+---
+
+## Daily Rclone Copy Daemon (`rclone-backup`)
+
+The repository includes a stowed systemd user daemon that performs an automated, optimized `rclone copy` once daily.
+
+### How It Works:
+- **Package**: `rclone-backup` is stowed directly into `$HOME`.
+- **Systemd User Timer** (`~/.config/systemd/user/rclone-daily-backup.timer`): Triggers daily with `Persistent=true` (if the computer was suspended or powered down at the scheduled time, it triggers immediately upon the next wake/boot).
+- **Systemd User Service** (`~/.config/systemd/user/rclone-daily-backup.service`): Runs the backup script at a low CPU/IO priority (`nice 15`, `best-effort 7`) so it never impacts desktop responsiveness.
+- **Runner Script** (`~/.local/bin/rclone-daily-backup`):
+  - Enforces a single-instance lock (`flock`) to prevent overlapping backup runs.
+  - Verifies network connectivity to the rclone remote before starting.
+  - Sends desktop notifications on completion or errors via `notify-send`.
+  - Appends detailed timestamped logs to `~/.local/state/rclone/daily-backup.log`.
+
+### Customizing Backup Sources and Targets:
+Edit `~/.config/rclone/daily-copy.conf` (or create `~/.config/rclone/daily-copy.conf.local` for machine-specific overrides):
+```bash
+# Target remote and destination directory
+RCLONE_REMOTE="gdrive"
+RCLONE_DEST="gdrive:DailyBackup"
+
+# Folders to copy daily
+BACKUP_SOURCES=(
+    "$HOME/Documents"
+    # "$HOME/Pictures"
+    # "/media/daveg/Lib/Movies"
+)
+
+# Tuned transfer parameters
+RCLONE_FLAGS=(
+    --drive-chunk-size 128M
+    --transfers 4
+    --checkers 8
+    --retries 3
+    --stats 30s
+    --fast-list
+)
+```
+
+### Daemon Management Commands:
+```bash
+# View timer schedule and service status:
+dotfiles daemon status
+
+# Run a backup immediately on demand:
+dotfiles daemon run
+
+# View live / recent backup execution logs:
+dotfiles daemon logs
+
+# Enable or disable the daily timer:
+dotfiles daemon enable
+dotfiles daemon disable
+```
+
+> [!TIP]
+> If you want the daily timer to execute even when you are logged out of your graphical desktop session, enable systemd user lingering:
+> ```bash
+> loginctl enable-linger $USER
+> ```
 
 ---
 

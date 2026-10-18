@@ -7,12 +7,14 @@ usage() {
     echo "Usage: dotfiles [command]"
     echo ""
     echo "Commands:"
-    echo "  sync     Pull latest changes and re-stow configuration"
-    echo "  update   Pull changes, re-stow, and run full system updates"
-    echo "  status   Show git status of the myLinux repository"
-    echo "  diff     Show unstaged changes in the myLinux repository"
-    echo "  cd       Print path to myLinux repository (eval \"cd \$(dotfiles cd)\")"
-    echo "  help     Show this help message"
+    echo "  sync                  Pull latest changes and re-stow configurations"
+    echo "  update                Pull changes, re-stow, and run full system updates"
+    echo "  status                Show git status of the myLinux repository"
+    echo "  diff                  Show unstaged changes in the myLinux repository"
+    echo "  autostart [DE]        Manage autostart packages (cosmic | gnome | plasma | detect | status)"
+    echo "  daemon [action]       Manage rclone daily backup daemon (status | enable | disable | run | logs)"
+    echo "  cd                    Print path to myLinux repository (eval \"cd \$(dotfiles cd)\")"
+    echo "  help                  Show this help message"
 }
 
 case "$1" in
@@ -27,6 +29,83 @@ case "$1" in
         ;;
     diff)
         git -C "$REPO_DIR" diff
+        ;;
+    autostart)
+        case "${2:-status}" in
+            cosmic)
+                echo "Stowing autostart-cosmic..."
+                cd "$REPO_DIR" && stow -v -R -t "$HOME" autostart-cosmic
+                ;;
+            gnome)
+                echo "Stowing autostart-gnome..."
+                cd "$REPO_DIR" && stow -v -R -t "$HOME" autostart-gnome
+                ;;
+            plasma)
+                echo "Stowing autostart-plasma..."
+                cd "$REPO_DIR" && stow -v -R -t "$HOME" autostart-plasma
+                ;;
+            detect)
+                de="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-}}"
+                echo "Detected Desktop Environment: $de"
+                de_lower="$(echo "$de" | tr '[:upper:]' '[:lower:]')"
+                if [[ "$de_lower" == *"cosmic"* ]]; then
+                    cd "$REPO_DIR" && stow -v -R -t "$HOME" autostart-cosmic
+                elif [[ "$de_lower" == *"gnome"* ]]; then
+                    cd "$REPO_DIR" && stow -v -R -t "$HOME" autostart-gnome
+                elif [[ "$de_lower" == *"kde"* || "$de_lower" == *"plasma"* ]]; then
+                    cd "$REPO_DIR" && stow -v -R -t "$HOME" autostart-plasma
+                else
+                    echo "Could not automatically determine DE from '$de'. Choose cosmic, gnome, or plasma."
+                fi
+                ;;
+            status|"")
+                echo "=== ~/.config/autostart entries ==="
+                ls -la "$HOME/.config/autostart"
+                ;;
+            *)
+                echo "Usage: dotfiles autostart [cosmic|gnome|plasma|detect|status]"
+                exit 1
+                ;;
+        esac
+        ;;
+    daemon)
+        case "${2:-status}" in
+            status)
+                echo "=== Rclone Daily Backup Timer Status ==="
+                systemctl --user status rclone-daily-backup.timer --no-pager || true
+                echo ""
+                echo "=== Next Scheduled Runs ==="
+                systemctl --user list-timers --all | grep -E "(UNIT|rclone)" || true
+                ;;
+            enable)
+                echo "Enabling and starting rclone daily backup timer..."
+                systemctl --user daemon-reload
+                systemctl --user enable --now rclone-daily-backup.timer
+                echo "Timer enabled. Run 'dotfiles daemon status' to verify."
+                ;;
+            disable)
+                echo "Disabling rclone daily backup timer..."
+                systemctl --user disable --now rclone-daily-backup.timer
+                ;;
+            run)
+                echo "Triggering immediate rclone daily backup..."
+                systemctl --user start rclone-daily-backup.service
+                systemctl --user status rclone-daily-backup.service --no-pager
+                ;;
+            logs)
+                echo "=== Recent Rclone Daily Backup Service Logs ==="
+                journalctl --user -u rclone-daily-backup.service -n 50 --no-pager
+                if [ -f "$HOME/.local/state/rclone/daily-backup.log" ]; then
+                    echo ""
+                    echo "=== Last Log File Entries (~/.local/state/rclone/daily-backup.log) ==="
+                    tail -n 30 "$HOME/.local/state/rclone/daily-backup.log"
+                fi
+                ;;
+            *)
+                echo "Usage: dotfiles daemon [status|enable|disable|run|logs]"
+                exit 1
+                ;;
+        esac
         ;;
     cd)
         echo "$REPO_DIR"

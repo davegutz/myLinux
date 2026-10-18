@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=GNOME Session Init
+Comment=Startup hooks for Lubuntu / Ubuntu GNOME
+Exec=true
+Terminal=false
+Type=Application
+OnlyShowIn=GNOME;

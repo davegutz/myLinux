@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=rclone
+GenericName=Cloud Storage Mount
+Comment=Mount Google Drive at user login via ~/bin/Rclone
+Exec=/home/daveg/bin/Rclone
+Terminal=false
+Type=Application
+X-Desktop-File-Install-Version=0.27

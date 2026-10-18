@@ -34,6 +34,15 @@ MANAGED_FILES=(
     "bin/Rclone"
     ".local/share/gnucash/stylesheets-2.0"
     ".local/share/gnucash/books/Gutz_joint.gnucash.gcm"
+    ".config/autostart/rclone.desktop"
+    ".config/autostart/firefox.desktop"
+    ".config/autostart/thunar.desktop"
+    ".config/autostart/caffeine.desktop"
+    ".config/autostart/gnome-session-init.desktop"
+    ".config/rclone/daily-copy.conf"
+    ".config/systemd/user/rclone-daily-backup.service"
+    ".config/systemd/user/rclone-daily-backup.timer"
+    ".local/bin/rclone-daily-backup"
 )
 
 backed_up_count=0

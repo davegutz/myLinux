@@ -66,19 +66,55 @@ mkdir -p "$HOME/.config/alacritty"
 mkdir -p "$HOME/.config/fastfetch"
 mkdir -p "$HOME/.config/gtk-3.0"
 mkdir -p "$HOME/.config/gtk-4.0"
+mkdir -p "$HOME/.config/autostart"
+mkdir -p "$HOME/.config/systemd/user"
+mkdir -p "$HOME/.config/rclone"
+mkdir -p "$HOME/.local/state/rclone"
 mkdir -p "$HOME/.local/bin"
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/.local/share/fonts"
 mkdir -p "$HOME/.local/share/gnucash/books"
 
-# Deploy common dotfiles via GNU Stow
+# Deploy configurations via GNU Stow
 echo "Symlinking common configurations via GNU Stow..."
 cd "$DOTFILES_DIR"
 stow -v -R -t "$HOME" common
 
+# Detect and deploy environment-specific autostart files
+DE_SESSION="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-}}"
+DE_LOWER="$(echo "$DE_SESSION" | tr '[:upper:]' '[:lower:]')"
+AUTOSTART_PKG=""
+
+if [[ "$DE_LOWER" == *"cosmic"* ]]; then
+    AUTOSTART_PKG="autostart-cosmic"
+elif [[ "$DE_LOWER" == *"gnome"* ]]; then
+    AUTOSTART_PKG="autostart-gnome"
+elif [[ "$DE_LOWER" == *"kde"* || "$DE_LOWER" == *"plasma"* ]]; then
+    AUTOSTART_PKG="autostart-plasma"
+fi
+
+if [ -n "$AUTOSTART_PKG" ] && [ -d "$DOTFILES_DIR/$AUTOSTART_PKG" ]; then
+    echo -e "Detected desktop environment: ${YELLOW}$DE_SESSION${NC} -> Stowing $AUTOSTART_PKG..."
+    stow -v -R -t "$HOME" "$AUTOSTART_PKG"
+else
+    echo -e "${YELLOW}Notice: Desktop environment '$DE_SESSION' did not match a specific autostart package.${NC}"
+    echo -e "You can manually stow your target environment: ${YELLOW}stow -v -R -t \"\$HOME\" autostart-[cosmic|gnome|plasma]${NC}"
+fi
+
+# Deploy daily rclone copy daemon package
+echo "Symlinking rclone daily copy daemon via GNU Stow..."
+stow -v -R -t "$HOME" rclone-backup
+
 # Ensure scripts in ~/.local/bin and ~/bin are executable
 chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
 chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py "$HOME/bin/Rclone" 2>/dev/null || true
+
+# Enable and start the systemd user timer for daily rclone copy
+if command -v systemctl >/dev/null 2>&1; then
+    echo "Registering and enabling rclone daily copy timer..."
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now rclone-daily-backup.timer 2>/dev/null || true
+fi
 
 # 4. Install and configure fonts
 echo -e "\n${GREEN}[Step 4/5] Installing and verifying fonts...${NC}"

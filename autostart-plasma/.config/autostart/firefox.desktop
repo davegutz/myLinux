@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Firefox
+GenericName=Web Browser
+Comment=Browse the World Wide Web
+Icon=firefox
+Exec=/usr/bin/firefox
+Terminal=false
+StartupNotify=true
+Categories=Network;WebBrowser;
+OnlyShowIn=KDE;

@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily Rclone Copy Backup Service
+Documentation=https://github.com/davegutz/myLinux
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/rclone-daily-backup
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# rclone-daily-backup - Daily automated rclone copy engine
+# Managed by GNU Stow via myLinux / systemd user timer
+set -euo pipefail
+
+# 1. Load configuration
+CONF_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/rclone/daily-copy.conf"
+CONF_LOCAL="${XDG_CONFIG_HOME:-$HOME/.config}/rclone/daily-copy.conf.local"
+
+if [ -f "$CONF_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$CONF_FILE"
+fi
+
+# Allow machine-specific overrides
+if [ -f "$CONF_LOCAL" ]; then
+    # shellcheck source=/dev/null
+    source "$CONF_LOCAL"
+fi
+
+# Defaults if not defined
+RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
+RCLONE_DEST="${RCLONE_DEST:-gdrive:DailyBackup}"
+BACKUP_SOURCES=("${BACKUP_SOURCES[@]:-$HOME/Documents}")
+RCLONE_FLAGS=("${RCLONE_FLAGS[@]:---drive-chunk-size 128M --transfers 4 --checkers 8 --retries 3 --stats 30s --fast-list}")
+NOTIFY_ON_COMPLETION="${NOTIFY_ON_COMPLETION:-true}"
+
+# 2. Logging and Lock Setup
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/rclone"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/daily-backup.log"
+LOCK_FILE="/tmp/rclone-daily-backup-$USER.lock"
+
+# Ensure only one copy job runs at a time
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another rclone backup is already in progress. Exiting."
+    exit 0
+fi
+
+echo "==========================================================" | tee -a "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting daily rclone copy..." | tee -a "$LOG_FILE"
+
+# 3. Check Prerequisites
+if ! command -v rclone >/dev/null 2>&1; then
+    echo "[ERROR] rclone is not installed or not in PATH." | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+# 4. Check remote availability (avoid running when offline)
+if ! rclone listremotes | grep -q "^${RCLONE_REMOTE}:"; then
+    echo "[ERROR] Remote '${RCLONE_REMOTE}' not found in rclone configuration." | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+# Quick connectivity test to the remote
+if ! timeout 15 rclone lsd "${RCLONE_REMOTE}:" >/dev/null 2>&1; then
+    echo "[WARNING] Remote '${RCLONE_REMOTE}:' is unreachable (offline or auth issue). Skipping run." | tee -a "$LOG_FILE"
+    exit 0
+fi
+
+# 5. Execute copy for each configured source directory
+FAILED=0
+for src in "${BACKUP_SOURCES[@]}"; do
+    if [ ! -d "$src" ]; then
+        echo "[WARNING] Source directory does not exist: $src (skipping)" | tee -a "$LOG_FILE"
+        continue
+    fi
+
+    folder_name="$(basename "$src")"
+    dest_path="${RCLONE_DEST%/}/${folder_name}"
+    
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Copying $src -> $dest_path ..." | tee -a "$LOG_FILE"
+    if rclone copy "$src" "$dest_path" "${RCLONE_FLAGS[@]}" --log-file="$LOG_FILE" --log-level NOTICE; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Successfully copied $folder_name." | tee -a "$LOG_FILE"
+    else
+        echo "[ERROR] Failed to copy $folder_name." | tee -a "$LOG_FILE"
+        FAILED=1
+    fi
+done
+
+# 6. Status and Notification
+END_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
+if [ $FAILED -eq 0 ]; then
+    MSG="Daily rclone copy completed successfully at $END_TIME."
+    echo "[$END_TIME] $MSG" | tee -a "$LOG_FILE"
+    if [ "$NOTIFY_ON_COMPLETION" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -i document-save "Rclone Daily Backup" "$MSG" 2>/dev/null || true
+    fi
+else
+    MSG="Daily rclone copy encountered errors. Check $LOG_FILE"
+    echo "[$END_TIME] $MSG" | tee -a "$LOG_FILE"
+    if [ "$NOTIFY_ON_COMPLETION" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -u critical -i dialog-warning "Rclone Daily Backup Failed" "$MSG" 2>/dev/null || true
+    fi
+    exit 1
+fi
