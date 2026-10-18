@@ -40,6 +40,10 @@ SYNC_ON_SAVE="${SYNC_ON_SAVE:-true}"
 DEBOUNCE_SECONDS="${DEBOUNCE_SECONDS:-5}"
 SYNC_ON_EXIT="${SYNC_ON_EXIT:-true}"
 NOTIFY="${NOTIFY:-true}"
+TERMINAL_MONITOR="${TERMINAL_MONITOR:-true}"
+HOLD_TERMINAL="${HOLD_TERMINAL:-true}"
+HOLD_SECONDS="${HOLD_SECONDS:-3}"
+HOLD_ON_ERROR="${HOLD_ON_ERROR:-true}"
 
 # CLI flags
 REFRESH_ONLY=false
@@ -49,6 +53,8 @@ FORCE=false
 DRY_RUN=false
 SHOW_STATUS=false
 FORCE_UNLOCK=false
+FORCE_TERMINAL=false
+NO_TERMINAL=false
 
 usage() {
     cat << EOF
@@ -62,6 +68,8 @@ Options:
   -o, --open-ods        Open the budget spreadsheets in LibreOffice Calc
   -f, --open-folder     Open the local GnuCash directory in file manager
   -s, --status          Check and display sync status and cloud lock status
+  -t, --terminal        Force execution inside a terminal monitor window
+  --no-terminal         Run silently in background without a terminal window
   -n, --dry-run         Simulate refresh actions without copying files
   --force               Force copy remote files or override cloud locks
   --unlock              Force release any existing cloud session lock on Google Drive
@@ -100,6 +108,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -s|--status)
             SHOW_STATUS=true
+            shift
+            ;;
+        -t|--terminal)
+            FORCE_TERMINAL=true
+            shift
+            ;;
+        --no-terminal)
+            NO_TERMINAL=true
             shift
             ;;
         -n|--dry-run)
@@ -168,12 +184,86 @@ ask_user_override() {
     return 1
 }
 
+# Function: Pause on error when running in a terminal so user can read message
+hold_terminal_on_error() {
+    if [ -t 1 ] && [ "${HOLD_ON_ERROR:-true}" = true ]; then
+        echo ""
+        read -r -t 10 -p "Press Enter to close window (auto-closing in 10s)..." || true
+    fi
+}
+
+# Function: Launch inside system terminal emulator
+launch_in_terminal() {
+    local term_bin=""
+    local title="GnuCash Joint - Process Monitor"
+
+    if [ -n "${TERMINAL:-}" ] && command -v "$TERMINAL" >/dev/null 2>&1; then
+        term_bin="$TERMINAL"
+    else
+        for t in konsole qterminal alacritty kitty xfce4-terminal gnome-terminal x-terminal-emulator xterm; do
+            if command -v "$t" >/dev/null 2>&1; then
+                term_bin="$t"
+                break
+            fi
+        done
+    fi
+
+    if [ -z "$term_bin" ]; then
+        return 1
+    fi
+
+    local self_path="$0"
+    case "$(basename "$term_bin")" in
+        konsole)
+            exec "$term_bin" --title "$title" -e env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+        qterminal)
+            exec "$term_bin" -e env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+        alacritty)
+            exec "$term_bin" --title "$title" -e env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+        kitty)
+            exec "$term_bin" --title "$title" env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+        xfce4-terminal)
+            exec "$term_bin" --title="$title" -x env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+        gnome-terminal)
+            exec "$term_bin" --title="$title" -- env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+        x-terminal-emulator|xterm)
+            exec "$term_bin" -T "$title" -e env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+        *)
+            exec "$term_bin" -e env GNUCASH_IN_TERMINAL=1 bash "$self_path" "$@"
+            ;;
+    esac
+}
+
+# Auto-relaunch inside terminal monitor if requested and not already running in a terminal
+if [ "$SHOW_STATUS" != true ] && [ "$OPEN_FOLDER" != true ] && [ "$OPEN_ODS" != true ] && [ "$FORCE_UNLOCK" != true ]; then
+    if [ "$NO_TERMINAL" != true ]; then
+        if [ "$FORCE_TERMINAL" = true ] || [ "$TERMINAL_MONITOR" = true ]; then
+            if [ ! -t 1 ] && [ -z "${GNUCASH_IN_TERMINAL:-}" ]; then
+                launch_in_terminal "$@"
+            fi
+        fi
+    fi
+fi
+
+# Set terminal window title if standard output is a terminal
+if [ -t 1 ]; then
+    printf "\033]0;%s\007" "GnuCash Joint - Process Monitor" 2>/dev/null || true
+fi
+
 # 2. Local single-instance lock setup
 LOCK_FILE="/tmp/gnucash-refresh-$USER.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another gnucash-refresh process is already active."
     notify "normal" "GnuCash Refresh" "Another sync operation is already in progress on this machine."
+    hold_terminal_on_error
     exit 0
 fi
 
@@ -195,6 +285,7 @@ check_gnucash_active() {
 if check_gnucash_active; then
     echo "[WARNING] GnuCash is currently running with $GNUCASH_FILE open."
     notify "critical" "GnuCash Active" "GnuCash currently has $GNUCASH_FILE open on this machine. Please save and close GnuCash before refreshing."
+    hold_terminal_on_error
     if [ "$REFRESH_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
         exit 1
     fi
@@ -391,12 +482,14 @@ fi
 
 # Ensure mount before checking files
 if ! ensure_mount; then
+    hold_terminal_on_error
     exit 1
 fi
 
 REMOTE_DIR=$(find_remote_dir) || {
     echo "[ERROR] Dedicated remote folder not found: $GDRIVE_MOUNT/$REMOTE_BASE_PATH/$REMOTE_FOLDER"
     notify "critical" "GnuCash Refresh Failed" "Dedicated remote folder not found: $REMOTE_BASE_PATH/$REMOTE_FOLDER"
+    hold_terminal_on_error
     exit 1
 }
 
@@ -535,6 +628,7 @@ fi
 
 # Check cloud lock before modifying any files or opening books
 if ! check_cloud_lock; then
+    hold_terminal_on_error
     exit 1
 fi
 
@@ -641,15 +735,26 @@ if [ ! -f "$TARGET_GNUCASH" ]; then
     echo "        Hint: Run 'gnucash-refresh -r' to download it from Google Drive,"
     echo "              or check that $REMOTE_DIR/$GNUCASH_FILE exists on Google Drive."
     notify "critical" "GnuCash Launch Error" "File not found: $TARGET_GNUCASH\nRun 'gnucash-refresh -r' to download."
+    hold_terminal_on_error
     exit 1
 fi
 
-# Acquire cloud session lock for the duration of this session
-acquire_cloud_lock
-
 cleanup_session() {
-    echo "[Cleanup] Session ending. Performing final synchronization..."
+    # If GnuCash is still running (e.g. user closed the terminal window, pressed Ctrl+C, or sent SIGHUP)
+    if [ -n "${GNUCASH_PID:-}" ] && kill -0 "$GNUCASH_PID" 2>/dev/null; then
+        echo ""
+        echo "[Cleanup] Process monitor closed. Gracefully terminating GnuCash (PID: $GNUCASH_PID)..."
+        kill -TERM "$GNUCASH_PID" 2>/dev/null || true
+        for _ in {1..10}; do
+            if ! kill -0 "$GNUCASH_PID" 2>/dev/null; then
+                break
+            fi
+            sleep 0.5
+        done
+    fi
+
     if [ "$SYNC_ON_EXIT" = true ]; then
+        echo "[Cleanup] Performing final synchronization to Google Drive..."
         for f in "${ALL_TARGET_FILES[@]}"; do
             local l_file="$LOCAL_DIR/$f"
             local r_file="$REMOTE_DIR/$f"
@@ -662,7 +767,9 @@ cleanup_session() {
                     if [ "$l_mtime" -gt "$r_mtime" ] || [ "$FORCE" = true ]; then
                         backup_remote_file "$r_file"
                         cp -p "$l_file" "$r_file"
-                        echo "[Exit Sync] Saved final $f -> Google Drive"
+                        local now_str
+                        now_str=$(date '+%Y-%m-%d %H:%M:%S')
+                        echo "[$now_str] [Exit Sync] Saved final $f -> Google Drive"
                     fi
                 fi
             fi
@@ -675,6 +782,9 @@ cleanup_session() {
 
 # Trap signals for guaranteed clean termination without zombies
 trap cleanup_session EXIT INT TERM HUP
+
+# Acquire cloud session lock for the duration of this session
+acquire_cloud_lock
 
 echo "Launching GnuCash on $TARGET_GNUCASH..."
 gnucash "$TARGET_GNUCASH" &
@@ -692,7 +802,14 @@ done
 
 # Function: Watch for local saves while GnuCash is running
 watch_and_sync() {
-    echo "[Supervisor] Watching for local saves (Ctrl+S) while GnuCash is running..."
+    echo ""
+    echo "=========================================================="
+    echo " GnuCash Joint Active Session (PID: $GNUCASH_PID)"
+    echo " Process Monitor: Watching for local saves (Ctrl+S)..."
+    echo "   * You may minimize this terminal window while working."
+    echo "   * Closing this window or pressing Ctrl+C saves and exits."
+    echo "=========================================================="
+    echo ""
     while kill -0 "$GNUCASH_PID" 2>/dev/null; do
         sleep 3
 
@@ -723,7 +840,9 @@ watch_and_sync() {
                         cp -p "$l_file" "$r_file"
                         LAST_MTIMES["$f"]=$(stat -c %Y "$l_file")
                         PUSHED_NAMES+=("$f")
-                        echo "[Save Sync] Synced $f -> Google Drive"
+                        local now_str
+                        now_str=$(date '+%Y-%m-%d %H:%M:%S')
+                        echo "[$now_str] [Save Sync] Synced $f -> Google Drive"
                     fi
                 fi
             done
@@ -744,5 +863,10 @@ else
 fi
 
 # Normal termination triggers trap cleanup_session
+echo ""
 echo "GnuCash session ended."
+if [ -t 1 ] && [ "${HOLD_TERMINAL:-true}" = true ]; then
+    echo "Closing process monitor in ${HOLD_SECONDS:-3} seconds..."
+    sleep "${HOLD_SECONDS:-3}"
+fi
 exit 0

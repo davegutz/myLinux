@@ -6,10 +6,15 @@ GenericName=Finance Management (Joint)
 Comment=Refresh local copies from Google Drive and open Joint GnuCash
 Exec=/home/daveg/.local/bin/gnucash-refresh
 Icon=gnucash-icon
-Terminal=false
+Terminal=true
 Categories=Office;Finance;
 StartupNotify=true
-Actions=RefreshOnly;OpenFolder;OpenSpreadsheets;UnlockCloud;
+Actions=RefreshOnly;OpenFolder;OpenSpreadsheets;UnlockCloud;LaunchBackground;
+
+[Desktop Action LaunchBackground]
+Name=Launch Silently (No Terminal)
+Exec=/home/daveg/.local/bin/gnucash-refresh --no-terminal
+Icon=gnucash-icon
 
 [Desktop Action RefreshOnly]
 Name=Refresh from Google Drive Only
