@@ -9,7 +9,8 @@ usage() {
     echo "Commands:"
     echo "  sync                  Pull latest changes and re-stow configurations"
     echo "  update                Pull changes, re-stow, and run full system updates"
-    echo "  status                Show git status of the myLinux repository"
+    echo "  status [args]         Show git status of the myLinux repository (use -r to fetch first)"
+    echo "  check                 Check GitHub to see if remote updates are available"
     echo "  diff                  Show unstaged changes in the myLinux repository"
     echo "  autostart [DE]        Manage autostart packages (cosmic | gnome | plasma | detect | status)"
     echo "  daemon [action]       Manage rclone daily backup daemon (status | enable | disable | run | logs)"
@@ -25,7 +26,30 @@ case "$1" in
         "$REPO_DIR/scripts/sync.sh" --update
         ;;
     status)
+        if [[ "${2:-}" == "-r" || "${2:-}" == "--remote" ]]; then
+            echo "Fetching latest status from origin..."
+            git -C "$REPO_DIR" fetch origin --quiet 2>/dev/null || true
+        fi
         git -C "$REPO_DIR" status
+        ;;
+    check)
+        echo "Checking GitHub for remote updates..."
+        if ! git -C "$REPO_DIR" fetch origin --quiet 2>/dev/null; then
+            echo "Warning: Could not connect to remote repository (offline or auth issue)."
+            exit 1
+        fi
+        behind=$(git -C "$REPO_DIR" rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
+        ahead=$(git -C "$REPO_DIR" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+
+        if [ "$behind" -gt 0 ]; then
+            echo -e "\033[1;33m==> myLinux is BEHIND GitHub by $behind commit(s).\033[0m"
+            echo "Run 'dotfiles sync' (or 'mylinux-sync') to pull and re-stow configurations."
+        elif [ "$ahead" -gt 0 ]; then
+            echo -e "\033[1;32m==> myLinux is AHEAD of GitHub by $ahead commit(s).\033[0m"
+            echo "Run 'git -C \$(dotfiles cd) push' (or 'gp') to publish local commits."
+        else
+            echo -e "\033[0;32m==> myLinux is UP TO DATE with GitHub.\033[0m"
+        fi
         ;;
     diff)
         git -C "$REPO_DIR" diff

@@ -126,6 +126,7 @@ Once deployed, the following utilities and aliases are available in any terminal
 | `encodeLinux.sh` | Transcodes DVD discs to `.m4v` and fetches `.en.srt` subtitles into `~/Videos/encodeLinux` |
 | `mylinux-sync` / `dotfiles sync` | Pulls latest Git commits and re-stows configurations & active autostart profile |
 | `mylinux-update` / `dotfiles update` | Pulls Git changes, re-stows, and runs a full system update (`pacman`/`paru` or `apt` + `flatpaks`) |
+| `dotfiles check` | Queries GitHub to see if remote commits or updates are available |
 | `dotfiles autostart [DE]` | Stow or switch autostart profile (`cosmic`, `gnome`, `plasma`, `detect`, or `status`) |
 | `dotfiles daemon [action]` | Control daily rclone copy daemon (`status`, `enable`, `disable`, `run`, `logs`) |
 | `sys-update` | Runs the distribution-aware system updater directly |
