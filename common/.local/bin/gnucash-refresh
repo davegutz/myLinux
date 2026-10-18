@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gnucash-refresh - Refresh local copies of GnuCash & budget ODS files from Google Drive and launch GnuCash
+# gnucash-refresh - Bidirectional synchronization engine and supervisor for GnuCash & budget spreadsheets
 # Managed by GNU Stow via myLinux
 set -euo pipefail
 
@@ -33,8 +33,13 @@ RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
 CREATE_BACKUP="${CREATE_BACKUP:-true}"
 BACKUP_DIR="${BACKUP_DIR:-$LOCAL_DIR/.backups}"
 MAX_BACKUPS="${MAX_BACKUPS:-10}"
+REMOTE_BACKUP="${REMOTE_BACKUP:-true}"
+REMOTE_LOCK_ENABLED="${REMOTE_LOCK_ENABLED:-true}"
+STALE_LOCK_HOURS="${STALE_LOCK_HOURS:-6}"
+SYNC_ON_SAVE="${SYNC_ON_SAVE:-true}"
+DEBOUNCE_SECONDS="${DEBOUNCE_SECONDS:-5}"
+SYNC_ON_EXIT="${SYNC_ON_EXIT:-true}"
 NOTIFY="${NOTIFY:-true}"
-SYNC_BACK_ON_EXIT="${SYNC_BACK_ON_EXIT:-false}"
 
 # CLI flags
 REFRESH_ONLY=false
@@ -43,21 +48,23 @@ OPEN_FOLDER=false
 FORCE=false
 DRY_RUN=false
 SHOW_STATUS=false
+FORCE_UNLOCK=false
 
 usage() {
     cat << EOF
 Usage: gnucash-refresh [OPTIONS]
 
-Synchronizes local copies of $GNUCASH_FILE and related budget spreadsheets
-exclusively from Google Drive ($REMOTE_BASE_PATH/$REMOTE_FOLDER) and launches GnuCash.
+Bidirectionally synchronizes local copies of $GNUCASH_FILE and related budget spreadsheets
+with Google Drive ($REMOTE_BASE_PATH/$REMOTE_FOLDER) and supervises GnuCash.
 
 Options:
   -r, --refresh-only    Refresh files from Google Drive without launching GnuCash
   -o, --open-ods        Open the budget spreadsheets in LibreOffice Calc
   -f, --open-folder     Open the local GnuCash directory in file manager
-  -s, --status          Check and display sync status between local and remote
+  -s, --status          Check and display sync status and cloud lock status
   -n, --dry-run         Simulate refresh actions without copying files
-  --force               Force copy remote files even if local files are newer
+  --force               Force copy remote files or override cloud locks
+  --unlock              Force release any existing cloud session lock on Google Drive
   -h, --help            Show this help message
 
 Configuration file:
@@ -93,6 +100,10 @@ while [[ $# -gt 0 ]]; do
             FORCE=true
             shift
             ;;
+        --unlock)
+            FORCE_UNLOCK=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -114,16 +125,49 @@ notify() {
     fi
 }
 
-# 2. Lock setup
+ask_user_override() {
+    local prompt_msg="$1"
+
+    # Terminal stdin check
+    if [ -t 0 ]; then
+        echo -e "\n$prompt_msg"
+        read -r -p "Do you want to override this lock and proceed? (y/N): " response
+        [[ "$response" =~ ^[Yy]$ ]] && return 0
+        return 1
+    fi
+
+    # KDE Plasma / Qt GUI dialog
+    if command -v kdialog >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+        if kdialog --title "GnuCash Cloud Lock Warning" --yesno "$prompt_msg\n\nDo you want to override this lock and proceed?" 2>/dev/null; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    # GNOME / GTK dialog fallback
+    if command -v zenity >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+        if zenity --question --title="GnuCash Cloud Lock Warning" --text="$prompt_msg\n\nDo you want to override this lock and proceed?" 2>/dev/null; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    # Default to aborting for safety
+    return 1
+}
+
+# 2. Local single-instance lock setup
 LOCK_FILE="/tmp/gnucash-refresh-$USER.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another gnucash-refresh process is already active."
-    notify "normal" "GnuCash Refresh" "Another sync operation is already in progress."
+    notify "normal" "GnuCash Refresh" "Another sync operation is already in progress on this machine."
     exit 0
 fi
 
-# 3. Check if GnuCash currently has the book open
+# 3. Check if GnuCash currently has the book open locally
 check_gnucash_active() {
     if pgrep -x gnucash >/dev/null 2>&1; then
         return 0
@@ -132,7 +176,7 @@ check_gnucash_active() {
     # If GnuCash is not running but a leftover .LCK file exists, it is stale
     local lock_path="$LOCAL_DIR/${GNUCASH_FILE}.LCK"
     if [ -f "$lock_path" ]; then
-        echo "[INFO] Removing stale GnuCash lock file ($lock_path) from previous session."
+        echo "[INFO] Removing stale local GnuCash lock file ($lock_path) from previous session."
         rm -f "$lock_path"
     fi
     return 1
@@ -140,11 +184,10 @@ check_gnucash_active() {
 
 if check_gnucash_active; then
     echo "[WARNING] GnuCash is currently running with $GNUCASH_FILE open."
-    notify "critical" "GnuCash Active" "GnuCash currently has $GNUCASH_FILE open. Please save and close GnuCash before refreshing."
+    notify "critical" "GnuCash Active" "GnuCash currently has $GNUCASH_FILE open on this machine. Please save and close GnuCash before refreshing."
     if [ "$REFRESH_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
         exit 1
     fi
-    # If user wanted to open GnuCash, it is already open
     exit 0
 fi
 
@@ -157,7 +200,6 @@ ensure_mount() {
     echo "Google Drive is not mounted at $GDRIVE_MOUNT. Attempting to mount..."
     if [ -x "$HOME/bin/Rclone" ]; then
         "$HOME/bin/Rclone" >/dev/null 2>&1 || true
-        # Wait up to 5 seconds for mountpoint
         for _ in {1..10}; do
             if mountpoint -q "$GDRIVE_MOUNT"; then
                 echo "Mounted successfully."
@@ -188,7 +230,7 @@ find_remote_dir() {
     return 1
 }
 
-# 6. Safety Backup
+# 6. Safety Backup (Local)
 backup_file() {
     local src_file="$1"
     local fname
@@ -213,6 +255,123 @@ backup_file() {
     fi
 }
 
+# Cloud Backup Helper (Remote)
+backup_remote_file() {
+    local remote_file="$1"
+    if [ "$REMOTE_BACKUP" = true ] && [ -f "$remote_file" ]; then
+        local r_backups="$REMOTE_DIR/.backups"
+        mkdir -p "$r_backups"
+        local fname
+        fname="$(basename "$remote_file")"
+        cp -p "$remote_file" "$r_backups/${fname}.$(date +%Y%m%d_%H%M%S).bak" 2>/dev/null || true
+    fi
+}
+
+# 7. Cloud Session Lock Token Management (.session_lock)
+CLOUD_LOCK_FILE=""
+
+check_cloud_lock() {
+    if [ "$REMOTE_LOCK_ENABLED" != true ]; then
+        return 0
+    fi
+
+    local lock_path="$REMOTE_DIR/.session_lock"
+    if [ ! -f "$lock_path" ]; then
+        return 0
+    fi
+
+    # Read token contents
+    local lock_machine=""
+    local lock_user=""
+    local lock_pid=""
+    local lock_epoch=0
+    local lock_time=""
+
+    while IFS='=' read -r key value || [ -n "$key" ]; do
+        case "$key" in
+            machine) lock_machine="$value" ;;
+            user) lock_user="$value" ;;
+            pid) lock_pid="$value" ;;
+            epoch) lock_epoch="$value" ;;
+            time) lock_time="$value" ;;
+        esac
+    done < "$lock_path"
+
+    local my_hostname
+    my_hostname=$(hostname)
+
+    # 1. Lock belongs to this machine
+    if [ "$lock_machine" = "$my_hostname" ] && [ "$lock_user" = "$USER" ]; then
+        if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null && pgrep -x gnucash >/dev/null 2>&1; then
+            echo "[WARNING] Active session lock held by this machine (PID $lock_pid)."
+            notify "critical" "GnuCash Active" "GnuCash is already open and running on this machine."
+            return 1
+        else
+            echo "[INFO] Reclaiming stale local cloud session lock from previous run ($lock_time)."
+            rm -f "$lock_path"
+            return 0
+        fi
+    fi
+
+    # 2. Lock belongs to another machine / distribution
+    local current_epoch
+    current_epoch=$(date +%s)
+    local age_hours=$(( (current_epoch - lock_epoch) / 3600 ))
+
+    if [ "$FORCE" = true ] || [ "$FORCE_UNLOCK" = true ]; then
+        echo "[NOTICE] Force override of cloud session lock held by $lock_machine."
+        rm -f "$lock_path"
+        return 0
+    fi
+
+    local warning_msg
+    if [ "$age_hours" -ge "$STALE_LOCK_HOURS" ]; then
+        warning_msg="Cloud lock held by '$lock_machine' (user '$lock_user') from $lock_time appears stale (older than ${STALE_LOCK_HOURS} hours)."
+    else
+        warning_msg="GnuCash Joint is currently active on '$lock_machine' (user '$lock_user', started $lock_time).\n\nProceeding concurrently may cause conflicting overwrites between your Linux distributions."
+    fi
+
+    echo -e "[WARNING] $warning_msg"
+    if ask_user_override "$warning_msg"; then
+        echo "[NOTICE] User chose to override cloud session lock from $lock_machine."
+        rm -f "$lock_path"
+        return 0
+    else
+        echo "[INFO] Launch aborted by user to preserve data integrity across distributions."
+        notify "normal" "GnuCash Launch Cancelled" "Cloud lock held by '$lock_machine'. Launch cancelled."
+        exit 0
+    fi
+}
+
+acquire_cloud_lock() {
+    if [ "$REMOTE_LOCK_ENABLED" != true ]; then
+        return 0
+    fi
+
+    CLOUD_LOCK_FILE="$REMOTE_DIR/.session_lock"
+    cat << EOF > "$CLOUD_LOCK_FILE"
+machine=$(hostname)
+user=$USER
+pid=$$
+epoch=$(date +%s)
+time=$(date '+%Y-%m-%d %H:%M:%S %Z')
+EOF
+    echo "[Lock] Acquired cloud session lock on Google Drive."
+}
+
+release_cloud_lock() {
+    if [ "$REMOTE_LOCK_ENABLED" != true ]; then
+        return 0
+    fi
+
+    if [ -n "$CLOUD_LOCK_FILE" ] && [ -f "$CLOUD_LOCK_FILE" ]; then
+        if grep -q "machine=$(hostname)" "$CLOUD_LOCK_FILE" 2>/dev/null; then
+            rm -f "$CLOUD_LOCK_FILE"
+            echo "[Lock] Released cloud session lock on Google Drive."
+        fi
+    fi
+}
+
 # Handle Open Folder
 if [ "$OPEN_FOLDER" = true ]; then
     mkdir -p "$LOCAL_DIR"
@@ -231,16 +390,35 @@ REMOTE_DIR=$(find_remote_dir) || {
     exit 1
 }
 
-echo "=========================================================="
-echo " GnuCash Joint Auto-Refresh Launcher"
-echo " Remote Source : $REMOTE_DIR"
-echo " Local Target  : $LOCAL_DIR"
-echo "=========================================================="
+# Handle Force Unlock
+if [ "$FORCE_UNLOCK" = true ]; then
+    if [ -f "$REMOTE_DIR/.session_lock" ]; then
+        rm -f "$REMOTE_DIR/.session_lock"
+        echo "Successfully unlocked Google Drive repository ($REMOTE_DIR/.session_lock removed)."
+        notify "normal" "GnuCash Cloud Lock" "Successfully removed cloud session lock from Google Drive."
+    else
+        echo "Google Drive repository is already unlocked."
+    fi
+    exit 0
+fi
 
 ALL_TARGET_FILES=("$GNUCASH_FILE" "${SPREADSHEET_FILES[@]}")
 
 # Handle Status Display
 if [ "$SHOW_STATUS" = true ]; then
+    echo "=========================================================="
+    echo " GnuCash Joint Auto-Refresh Launcher"
+    echo " Remote Source : $REMOTE_DIR"
+    echo " Local Target  : $LOCAL_DIR"
+    echo "=========================================================="
+    echo "--- Cloud Lock Status ---"
+    if [ -f "$REMOTE_DIR/.session_lock" ]; then
+        echo "  [LOCKED] Active session lock on Google Drive:"
+        sed 's/^/    /' "$REMOTE_DIR/.session_lock"
+    else
+        echo "  [UNLOCKED] No active session lock on Google Drive."
+    fi
+    echo ""
     echo "--- File Sync Status ---"
     for item in "${ALL_TARGET_FILES[@]}"; do
         local_path="$LOCAL_DIR/$item"
@@ -272,11 +450,23 @@ if [ "$SHOW_STATUS" = true ]; then
     exit 0
 fi
 
+# Check cloud lock before modifying any files or opening books
+if ! check_cloud_lock; then
+    exit 1
+fi
+
+echo "=========================================================="
+echo " GnuCash Joint Auto-Refresh Launcher"
+echo " Remote Source : $REMOTE_DIR"
+echo " Local Target  : $LOCAL_DIR"
+echo "=========================================================="
+
 mkdir -p "$LOCAL_DIR"
 
 UPDATED_COUNT=0
 UPDATED_NAMES=()
 
+# 8. Pull from Google Drive -> Local Target
 for item in "${ALL_TARGET_FILES[@]}"; do
     local_path="$LOCAL_DIR/$item"
     remote_path="$REMOTE_DIR/$item"
@@ -292,7 +482,6 @@ for item in "${ALL_TARGET_FILES[@]}"; do
         NEEDS_COPY=true
         echo "Local file missing: $item -> downloading from Google Drive"
     else
-        # Compare files
         if ! cmp -s "$local_path" "$remote_path"; then
             local_mtime=$(stat -c %Y "$local_path")
             remote_mtime=$(stat -c %Y "$remote_path")
@@ -301,7 +490,7 @@ for item in "${ALL_TARGET_FILES[@]}"; do
                 NEEDS_COPY=true
                 echo "Update available for $item (remote is newer)"
             elif [ "$local_mtime" -gt "$remote_mtime" ]; then
-                echo "[NOTICE] Local copy of $item is newer than remote. Use --force to overwrite."
+                echo "[NOTICE] Local copy of $item is newer than remote."
             else
                 NEEDS_COPY=true
                 echo "Differences detected in $item (sizes/contents differ)"
@@ -330,7 +519,7 @@ for item in "${ALL_TARGET_FILES[@]}"; do
     fi
 done
 
-# Notifications
+# Pull Notifications
 if [ "$UPDATED_COUNT" -gt 0 ]; then
     summary_list=$(IFS=', '; echo "${UPDATED_NAMES[*]}")
     echo "Refreshed $UPDATED_COUNT file(s): $summary_list"
@@ -352,34 +541,113 @@ if [ "$OPEN_ODS" = true ]; then
     fi
 fi
 
-# Launch GnuCash unless --refresh-only was specified
-if [ "$REFRESH_ONLY" = false ] && [ "$DRY_RUN" = false ]; then
-    TARGET_GNUCASH="$LOCAL_DIR/$GNUCASH_FILE"
-    if [ ! -f "$TARGET_GNUCASH" ]; then
-        echo "[ERROR] Local GnuCash file not found: $TARGET_GNUCASH"
-        notify "critical" "GnuCash Launch Error" "File not found: $TARGET_GNUCASH"
-        exit 1
-    fi
-
-    echo "Launching GnuCash on $TARGET_GNUCASH..."
-
-    if [ "$SYNC_BACK_ON_EXIT" = true ]; then
-        # Run GnuCash in foreground to monitor exit, then sync back
-        gnucash "$TARGET_GNUCASH"
-
-        # Check if local file was modified during session
-        if [ -f "$TARGET_GNUCASH" ] && [ -d "$REMOTE_DIR" ]; then
-            if ! cmp -s "$TARGET_GNUCASH" "$REMOTE_DIR/$GNUCASH_FILE"; then
-                echo "Syncing updated GnuCash file back to Google Drive..."
-                cp -p "$TARGET_GNUCASH" "$REMOTE_DIR/$GNUCASH_FILE"
-                notify "normal" "GnuCash Joint Saved" "Updated $GNUCASH_FILE saved back to Google Drive."
-            fi
-        fi
-    else
-        # Launch GnuCash detached in background
-        nohup gnucash "$TARGET_GNUCASH" >/dev/null 2>&1 &
-    fi
+# If refresh-only or dry-run, exit cleanly now
+if [ "$REFRESH_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
+    echo "Done."
+    exit 0
 fi
 
-echo "Done."
+# 9. Supervised Execution & In-Session Watcher
+TARGET_GNUCASH="$LOCAL_DIR/$GNUCASH_FILE"
+if [ ! -f "$TARGET_GNUCASH" ]; then
+    echo "[ERROR] Local GnuCash file not found: $TARGET_GNUCASH"
+    notify "critical" "GnuCash Launch Error" "File not found: $TARGET_GNUCASH"
+    exit 1
+fi
+
+# Acquire cloud session lock for the duration of this session
+acquire_cloud_lock
+
+cleanup_session() {
+    echo "[Cleanup] Session ending. Performing final synchronization..."
+    if [ "$SYNC_ON_EXIT" = true ]; then
+        for f in "${ALL_TARGET_FILES[@]}"; do
+            local l_file="$LOCAL_DIR/$f"
+            local r_file="$REMOTE_DIR/$f"
+            if [ -f "$l_file" ] && [ -d "$REMOTE_DIR" ]; then
+                if ! cmp -s "$l_file" "$r_file"; then
+                    local l_mtime
+                    local r_mtime
+                    l_mtime=$(stat -c %Y "$l_file")
+                    r_mtime=$(stat -c %Y "$r_file" 2>/dev/null || echo 0)
+                    if [ "$l_mtime" -gt "$r_mtime" ] || [ "$FORCE" = true ]; then
+                        backup_remote_file "$r_file"
+                        cp -p "$l_file" "$r_file"
+                        echo "[Exit Sync] Saved final $f -> Google Drive"
+                    fi
+                fi
+            fi
+        done
+    fi
+
+    release_cloud_lock
+    notify "low" "GnuCash Joint Closed" "All changes saved and synchronized to Google Drive."
+}
+
+# Trap signals for guaranteed clean termination without zombies
+trap cleanup_session EXIT INT TERM HUP
+
+echo "Launching GnuCash on $TARGET_GNUCASH..."
+gnucash "$TARGET_GNUCASH" &
+GNUCASH_PID=$!
+
+# Record initial mtimes for file watcher
+declare -A LAST_MTIMES
+for f in "${ALL_TARGET_FILES[@]}"; do
+    if [ -f "$LOCAL_DIR/$f" ]; then
+        LAST_MTIMES["$f"]=$(stat -c %Y "$LOCAL_DIR/$f")
+    else
+        LAST_MTIMES["$f"]=0
+    fi
+done
+
+# Watcher Loop: Runs strictly as long as GNUCASH_PID is alive
+if [ "$SYNC_ON_SAVE" = true ]; then
+    echo "[Supervisor] Watching for local saves (Ctrl+S) while GnuCash is running..."
+    while kill -0 "$GNUCASH_PID" 2>/dev/null; do
+        sleep 3
+
+        MODIFIED_ITEMS=()
+        for f in "${ALL_TARGET_FILES[@]}"; do
+            local l_file="$LOCAL_DIR/$f"
+            if [ -f "$l_file" ]; then
+                current_mtime=$(stat -c %Y "$l_file")
+                if [ "$current_mtime" -gt "${LAST_MTIMES["$f"]}" ]; then
+                    MODIFIED_ITEMS+=("$f")
+                fi
+            fi
+        done
+
+        if [ ${#MODIFIED_ITEMS[@]} -gt 0 ]; then
+            # Debounce pause to ensure write completion
+            sleep "$DEBOUNCE_SECONDS"
+
+            PUSHED_NAMES=()
+            for f in "${MODIFIED_ITEMS[@]}"; do
+                local l_file="$LOCAL_DIR/$f"
+                local r_file="$REMOTE_DIR/$f"
+
+                if [ -f "$l_file" ] && [ -d "$REMOTE_DIR" ]; then
+                    if ! cmp -s "$l_file" "$r_file"; then
+                        backup_remote_file "$r_file"
+                        cp -p "$l_file" "$r_file"
+                        LAST_MTIMES["$f"]=$(stat -c %Y "$l_file")
+                        PUSHED_NAMES+=("$f")
+                        echo "[Save Sync] Synced $f -> Google Drive"
+                    fi
+                fi
+            done
+
+            if [ ${#PUSHED_NAMES[@]} -gt 0 ]; then
+                notify "low" "GnuCash Joint Saved" "Saved changes synced to Google Drive:\n$(IFS=', '; echo "${PUSHED_NAMES[*]}")"
+            fi
+        fi
+    done
+else
+    # Wait for GnuCash to exit
+    wait "$GNUCASH_PID" 2>/dev/null || true
+fi
+
+# Normal termination triggers trap cleanup_session
+echo "GnuCash session ended."
 exit 0

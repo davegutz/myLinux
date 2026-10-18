@@ -9,7 +9,7 @@ Icon=gnucash-icon
 Terminal=false
 Categories=Office;Finance;
 StartupNotify=true
-Actions=RefreshOnly;OpenFolder;OpenSpreadsheets;
+Actions=RefreshOnly;OpenFolder;OpenSpreadsheets;UnlockCloud;
 
 [Desktop Action RefreshOnly]
 Name=Refresh from Google Drive Only
@@ -25,3 +25,8 @@ Icon=folder-open
 Name=Open Budget Spreadsheets (.ods)
 Exec=/home/daveg/.local/bin/gnucash-refresh --open-ods
 Icon=x-office-spreadsheet
+
+[Desktop Action UnlockCloud]
+Name=Release Cloud Lock
+Exec=/home/daveg/.local/bin/gnucash-refresh --unlock
+Icon=system-lock-screen

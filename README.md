@@ -239,24 +239,25 @@ dotfiles daemon disable
 
 ## GnuCash Joint Auto-Refresh Desktop Widget
 
-A desktop widget / launcher and synchronization engine maintained via GNU Stow under `common/`. It refreshes local copies of the joint accounting book and budget spreadsheets from Google Drive before launching GnuCash.
+A desktop widget / launcher and bidirectional synchronization engine maintained via GNU Stow under `common/`. It manages local copies of the joint accounting book and budget spreadsheets from Google Drive before, during, and after GnuCash runs.
 
 ### Features:
-- **Cloud Synchronization**: Safely pulls latest versions of:
-  - `~/Documents/Gutz_joint_gnucash/Gutz_joint.gnucash`
-  - `budget avg less invest.ods`
-  - `categories_as_budget_20220101-20240301.ods`
-  from Google Drive exclusively (`gdrive:Finance remote/Gutz_joint_gnucash`).
+- **Cloud Synchronization**: Pulls latest versions before launch and automatically pushes saves back to Google Drive (`gdrive:Finance remote/Gutz_joint_gnucash`).
 - **Dedicated Remote Folder**: Directly targets `Finance remote/Gutz_joint_gnucash` with no searching or scanning across other cloud directories.
-- **Safety Pre-Backups**: Automatically creates timestamped copies of local files in `~/Documents/Gutz_joint_gnucash/.backups/` before applying any remote changes (retaining the 10 most recent backups).
-- **Concurrency & Stale Lock Protection**: Detects if GnuCash is actively running to prevent file corruption, and cleans up stale `.LCK` lock files left over from ungraceful shutdowns or system crashes.
+- **In-Session Save Watcher**: While GnuCash is running, a supervisor monitor watches for local saves (Ctrl+S) and automatically pushes changes to Google Drive after a 5-second write debounce.
+- **Post-Session Exit Sync**: On closing GnuCash, a guaranteed final sync flushes any updated files to Google Drive.
+- **Zombie-Free Process Lifecycle**: The watcher process is strictly bound to GnuCash's PID with signal traps (`SIGTERM`, `SIGINT`, `EXIT`), ensuring no orphaned daemons or zombie processes linger after closing.
+- **Cloud Session Lock (`.session_lock`)**: Prevents conflicting edits between dual-boot or separate Linux distributions. Alerts the user if another machine currently has GnuCash open and offers override/cancel options.
+- **Safety Pre-Backups**: Automatically creates timestamped copies of local files in `~/Documents/Gutz_joint_gnucash/.backups/` and cloud backups in `gdrive:.../.backups/` before applying changes (retaining 10 backups).
+- **Concurrency & Stale Lock Protection**: Detects local running instances and cleans up stale `.LCK` files left by power loss or crashes.
 - **Desktop Widget & Actions**:
   - Direct launcher on the Desktop (`~/Desktop/GnuCash-Joint.desktop`).
   - System application menu launcher (`~/.local/share/applications/GnuCash-Joint.desktop`).
   - Right-click desktop actions:
-    - **Refresh from Google Drive Only** (sync without launching)
+    - **Refresh from Google Drive Only** (pull without launching)
     - **Open GnuCash Folder** (opens local directory in file manager)
     - **Open Budget Spreadsheets** (opens both `.ods` files in LibreOffice Calc)
+    - **Release Cloud Lock** (1-click unlock for stale cloud tokens)
 
 ### Configuration (`~/.config/gnucash/refresh-joint.conf`):
 ```bash
@@ -273,17 +274,25 @@ GDRIVE_MOUNT="$HOME/gdrive"
 REMOTE_BASE_PATH="Finance remote"
 REMOTE_FOLDER="Gutz_joint_gnucash"
 
-# Safety backups & notifications
+# Safety backups & cloud tokens
 CREATE_BACKUP=true
 BACKUP_DIR="$LOCAL_DIR/.backups"
 MAX_BACKUPS=10
+REMOTE_BACKUP=true
+REMOTE_LOCK_ENABLED=true
+STALE_LOCK_HOURS=6
+
+# Bidirectional sync settings
+SYNC_ON_SAVE=true
+DEBOUNCE_SECONDS=5
+SYNC_ON_EXIT=true
 NOTIFY=true
 ```
 Create `~/.config/gnucash/refresh-joint.conf.local` for machine-specific overrides.
 
 ### CLI Usage:
 ```bash
-# Check current local vs remote synchronization status:
+# Check current local vs remote synchronization & cloud lock status:
 gnucash-refresh --status
 
 # Simulate refresh without writing files:
@@ -291,6 +300,9 @@ gnucash-refresh --dry-run
 
 # Refresh cloud files without opening GnuCash:
 gnucash-refresh --refresh-only
+
+# Force release any stale cloud session lock:
+gnucash-refresh --unlock
 
 # Open the two budget spreadsheets in LibreOffice Calc:
 gnucash-refresh --open-ods
