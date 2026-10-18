@@ -70,6 +70,16 @@ Options:
 Configuration file:
   $CONF_FILE
   $CONF_LOCAL (optional machine-specific override)
+
+Hints & Next Steps:
+  * Initialize missing local files:
+      Run 'gnucash-refresh -r' to download missing copies from Google Drive.
+  * Inspect repository state:
+      Run 'gnucash-refresh -s' to see file differences, missing files, and lock state.
+  * Release a stale cloud lock:
+      Run 'gnucash-refresh --unlock' or right-click desktop icon -> 'Release Cloud Lock'.
+  * Force pull remote version:
+      Run 'gnucash-refresh --force -r' to overwrite local files with Google Drive copies.
 EOF
 }
 
@@ -404,8 +414,8 @@ fi
 
 ALL_TARGET_FILES=("$GNUCASH_FILE" "${SPREADSHEET_FILES[@]}")
 
-# Handle Status Display
-if [ "$SHOW_STATUS" = true ]; then
+# Function: Show Status and Actionable Hints
+show_status() {
     echo "=========================================================="
     echo " GnuCash Joint Auto-Refresh Launcher"
     echo " Remote Source : $REMOTE_DIR"
@@ -420,17 +430,38 @@ if [ "$SHOW_STATUS" = true ]; then
     fi
     echo ""
     echo "--- File Sync Status ---"
+    local missing_local=0
+    local missing_remote=0
+    local updates_available=0
+    local local_modified=0
+    local in_sync=0
+    local missing_local_files=()
+    local missing_remote_files=()
+
     for item in "${ALL_TARGET_FILES[@]}"; do
         local_path="$LOCAL_DIR/$item"
         remote_path="$REMOTE_DIR/$item"
 
+        if [ ! -f "$remote_path" ] && [ ! -f "$local_path" ]; then
+            echo "  [!] $item: MISSING locally AND on Google Drive"
+            missing_remote=$((missing_remote + 1))
+            missing_local=$((missing_local + 1))
+            missing_remote_files+=("$item")
+            missing_local_files+=("$item")
+            continue
+        fi
+
         if [ ! -f "$remote_path" ]; then
-            echo "  [-] $item: Remote file NOT found"
+            echo "  [-] $item: Remote file MISSING on Google Drive (local copy exists)"
+            missing_remote=$((missing_remote + 1))
+            missing_remote_files+=("$item")
             continue
         fi
 
         if [ ! -f "$local_path" ]; then
-            echo "  [+] $item: Local file MISSING (remote available)"
+            echo "  [+] $item: Local file MISSING (remote copy available)"
+            missing_local=$((missing_local + 1))
+            missing_local_files+=("$item")
             continue
         fi
 
@@ -441,12 +472,64 @@ if [ "$SHOW_STATUS" = true ]; then
 
         if [ "$local_size" -eq "$remote_size" ] && cmp -s "$local_path" "$remote_path"; then
             echo "  [=] $item: Identical (in sync)"
+            in_sync=$((in_sync + 1))
         elif [ "$remote_mtime" -gt "$local_mtime" ]; then
             echo "  [>] $item: Remote is NEWER (update available)"
+            updates_available=$((updates_available + 1))
         else
             echo "  [<] $item: Local is NEWER or DIFFERENT from remote"
+            local_modified=$((local_modified + 1))
         fi
     done
+
+    echo ""
+    echo "--- Instructions & Next Steps ---"
+
+    if [ $missing_local -gt 0 ]; then
+        echo "  * [MISSING Local File(s)]: ${missing_local_files[*]}"
+        echo "    -> Run 'gnucash-refresh' (or 'gnucash-refresh -r') to download and initialize"
+        echo "       these files from Google Drive into $LOCAL_DIR."
+    fi
+
+    if [ $missing_remote -gt 0 ]; then
+        echo "  * [MISSING Remote File(s)]: ${missing_remote_files[*]}"
+        echo "    -> These files do not exist on Google Drive ($REMOTE_DIR)."
+        for mf in "${missing_remote_files[@]}"; do
+            if [ -f "$LOCAL_DIR/$mf" ]; then
+                echo "       Upload local master: cp -p \"$LOCAL_DIR/$mf\" \"$REMOTE_DIR/\""
+            fi
+        done
+        echo "       Also verify Google Drive is mounted: 'Rclone' (check 'ls ~/gdrive')."
+    fi
+
+    if [ $updates_available -gt 0 ]; then
+        echo "  * [Remote Updates Available ($updates_available)]:"
+        echo "    -> Run 'gnucash-refresh' to update local copies and launch GnuCash, or"
+        echo "       run 'gnucash-refresh -r' to pull updates without launching."
+    fi
+
+    if [ $local_modified -gt 0 ]; then
+        echo "  * [Local Changes Pending Sync ($local_modified)]:"
+        echo "    -> Local file(s) are newer than Google Drive. Launch GnuCash using"
+        echo "       'gnucash-refresh'; changes will auto-sync on save (Ctrl+S) or exit."
+        echo "       (To discard local edits and overwrite from remote: 'gnucash-refresh --force -r')"
+    fi
+
+    if [ -f "$REMOTE_DIR/.session_lock" ]; then
+        echo "  * [Active Cloud Session Lock]:"
+        echo "    -> If left over from an abnormal shutdown or crash, release it with:"
+        echo "       'gnucash-refresh --unlock' or right-click desktop icon -> 'Release Cloud Lock'."
+    fi
+
+    if [ $missing_local -eq 0 ] && [ $missing_remote -eq 0 ] && [ $updates_available -eq 0 ] && [ $local_modified -eq 0 ] && [ ! -f "$REMOTE_DIR/.session_lock" ]; then
+        echo "  * All files are in sync and repository is unlocked."
+        echo "    Double-click the 'GnuCash (Joint)' desktop icon or run 'gnucash-refresh' to start."
+    fi
+}
+
+# Handle Status Display
+if [ "$SHOW_STATUS" = true ]; then
+    show_status
     exit 0
 fi
 
@@ -472,7 +555,11 @@ for item in "${ALL_TARGET_FILES[@]}"; do
     remote_path="$REMOTE_DIR/$item"
 
     if [ ! -f "$remote_path" ]; then
-        echo "[WARNING] Remote file not found: $item (skipping)"
+        echo "[WARNING] Remote file not found on Google Drive: $item (skipping)"
+        if [ -f "$local_path" ]; then
+            echo "          Hint: If your local file is the master, copy it to Google Drive:"
+            echo "          cp -p \"$local_path\" \"$remote_path\""
+        fi
         continue
     fi
 
@@ -480,7 +567,7 @@ for item in "${ALL_TARGET_FILES[@]}"; do
 
     if [ ! -f "$local_path" ]; then
         NEEDS_COPY=true
-        echo "Local file missing: $item -> downloading from Google Drive"
+        echo "[Init] Local file missing: $item -> downloading initial copy from Google Drive..."
     else
         if ! cmp -s "$local_path" "$remote_path"; then
             local_mtime=$(stat -c %Y "$local_path")
@@ -551,7 +638,9 @@ fi
 TARGET_GNUCASH="$LOCAL_DIR/$GNUCASH_FILE"
 if [ ! -f "$TARGET_GNUCASH" ]; then
     echo "[ERROR] Local GnuCash file not found: $TARGET_GNUCASH"
-    notify "critical" "GnuCash Launch Error" "File not found: $TARGET_GNUCASH"
+    echo "        Hint: Run 'gnucash-refresh -r' to download it from Google Drive,"
+    echo "              or check that $REMOTE_DIR/$GNUCASH_FILE exists on Google Drive."
+    notify "critical" "GnuCash Launch Error" "File not found: $TARGET_GNUCASH\nRun 'gnucash-refresh -r' to download."
     exit 1
 fi
 
@@ -601,16 +690,17 @@ for f in "${ALL_TARGET_FILES[@]}"; do
     fi
 done
 
-# Watcher Loop: Runs strictly as long as GNUCASH_PID is alive
-if [ "$SYNC_ON_SAVE" = true ]; then
+# Function: Watch for local saves while GnuCash is running
+watch_and_sync() {
     echo "[Supervisor] Watching for local saves (Ctrl+S) while GnuCash is running..."
     while kill -0 "$GNUCASH_PID" 2>/dev/null; do
         sleep 3
 
-        MODIFIED_ITEMS=()
+        local MODIFIED_ITEMS=()
         for f in "${ALL_TARGET_FILES[@]}"; do
             local l_file="$LOCAL_DIR/$f"
             if [ -f "$l_file" ]; then
+                local current_mtime
                 current_mtime=$(stat -c %Y "$l_file")
                 if [ "$current_mtime" -gt "${LAST_MTIMES["$f"]}" ]; then
                     MODIFIED_ITEMS+=("$f")
@@ -622,7 +712,7 @@ if [ "$SYNC_ON_SAVE" = true ]; then
             # Debounce pause to ensure write completion
             sleep "$DEBOUNCE_SECONDS"
 
-            PUSHED_NAMES=()
+            local PUSHED_NAMES=()
             for f in "${MODIFIED_ITEMS[@]}"; do
                 local l_file="$LOCAL_DIR/$f"
                 local r_file="$REMOTE_DIR/$f"
@@ -643,6 +733,11 @@ if [ "$SYNC_ON_SAVE" = true ]; then
             fi
         fi
     done
+}
+
+# Watcher Loop: Runs strictly as long as GNUCASH_PID is alive
+if [ "$SYNC_ON_SAVE" = true ]; then
+    watch_and_sync
 else
     # Wait for GnuCash to exit
     wait "$GNUCASH_PID" 2>/dev/null || true
