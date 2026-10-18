@@ -1,0 +1,27 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GnuCash (Joint)
+GenericName=Finance Management (Joint)
+Comment=Refresh local copies from Google Drive and open Joint GnuCash
+Exec=/home/daveg/.local/bin/gnucash-refresh
+Icon=gnucash-icon
+Terminal=false
+Categories=Office;Finance;
+StartupNotify=true
+Actions=RefreshOnly;OpenFolder;OpenSpreadsheets;
+
+[Desktop Action RefreshOnly]
+Name=Refresh from Google Drive Only
+Exec=/home/daveg/.local/bin/gnucash-refresh --refresh-only
+Icon=view-refresh
+
+[Desktop Action OpenFolder]
+Name=Open GnuCash Folder
+Exec=/home/daveg/.local/bin/gnucash-refresh --open-folder
+Icon=folder-open
+
+[Desktop Action OpenSpreadsheets]
+Name=Open Budget Spreadsheets (.ods)
+Exec=/home/daveg/.local/bin/gnucash-refresh --open-ods
+Icon=x-office-spreadsheet

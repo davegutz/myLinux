@@ -72,6 +72,9 @@ mkdir -p "$HOME/.config/rclone"
 mkdir -p "$HOME/.local/state/rclone"
 mkdir -p "$HOME/.local/bin"
 mkdir -p "$HOME/bin"
+mkdir -p "$HOME/Desktop"
+mkdir -p "$HOME/.config/gnucash"
+mkdir -p "$HOME/.local/share/applications"
 mkdir -p "$HOME/.local/share/fonts"
 mkdir -p "$HOME/.local/share/gnucash/books"
 
@@ -108,6 +111,7 @@ stow -v -R -t "$HOME" rclone-backup
 # Ensure scripts in ~/.local/bin and ~/bin are executable
 chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
 chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py "$HOME/bin/Rclone" 2>/dev/null || true
+chmod +x "$HOME/Desktop/"*.desktop "$HOME/.local/share/applications/"*.desktop 2>/dev/null || true
 
 # Enable and start the systemd user timer for daily rclone copy
 if command -v systemctl >/dev/null 2>&1; then

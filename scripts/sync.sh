@@ -32,6 +32,9 @@ mkdir -p "$HOME/.config/rclone"
 mkdir -p "$HOME/.local/state/rclone"
 mkdir -p "$HOME/.local/bin"
 mkdir -p "$HOME/bin"
+mkdir -p "$HOME/Desktop"
+mkdir -p "$HOME/.config/gnucash"
+mkdir -p "$HOME/.local/share/applications"
 
 # 3. Re-stow configurations
 echo -e "${GREEN}==> Re-stowing common configurations into $HOME...${NC}"
@@ -60,6 +63,7 @@ stow -v -R -t "$HOME" rclone-backup
 
 chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
 chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py "$HOME/bin/Rclone" 2>/dev/null || true
+chmod +x "$HOME/Desktop/"*.desktop "$HOME/.local/share/applications/"*.desktop 2>/dev/null || true
 
 # Reload systemd user daemon & ensure timer is active
 if command -v systemctl >/dev/null 2>&1; then

@@ -1,0 +1,409 @@
+#!/usr/bin/env bash
+# gnucash-refresh - Refresh local copies of GnuCash & budget ODS files from Google Drive and launch GnuCash
+# Managed by GNU Stow via myLinux
+set -euo pipefail
+
+# 1. Load configuration
+CONF_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/gnucash/refresh-joint.conf"
+CONF_LOCAL="${XDG_CONFIG_HOME:-$HOME/.config}/gnucash/refresh-joint.conf.local"
+
+if [ -f "$CONF_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$CONF_FILE"
+fi
+
+if [ -f "$CONF_LOCAL" ]; then
+    # shellcheck source=/dev/null
+    source "$CONF_LOCAL"
+fi
+
+# Defaults if not defined
+LOCAL_DIR="${LOCAL_DIR:-$HOME/Documents/Gutz_joint_gnucash}"
+GNUCASH_FILE="${GNUCASH_FILE:-Gutz_joint.gnucash}"
+if [ -z "${SPREADSHEET_FILES+x}" ] || [ ${#SPREADSHEET_FILES[@]} -eq 0 ]; then
+    SPREADSHEET_FILES=(
+        "budget avg less invest.ods"
+        "categories_as_budget_20220101-20240301.ods"
+    )
+fi
+GDRIVE_MOUNT="${GDRIVE_MOUNT:-$HOME/gdrive}"
+REMOTE_BASE_PATH="${REMOTE_BASE_PATH:-Finance remote}"
+REMOTE_FOLDER="${REMOTE_FOLDER:-}"
+RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
+CREATE_BACKUP="${CREATE_BACKUP:-true}"
+BACKUP_DIR="${BACKUP_DIR:-$LOCAL_DIR/.backups}"
+MAX_BACKUPS="${MAX_BACKUPS:-10}"
+NOTIFY="${NOTIFY:-true}"
+SYNC_BACK_ON_EXIT="${SYNC_BACK_ON_EXIT:-false}"
+
+# CLI flags
+REFRESH_ONLY=false
+OPEN_ODS=false
+OPEN_FOLDER=false
+FORCE=false
+DRY_RUN=false
+SHOW_STATUS=false
+
+usage() {
+    cat << EOF
+Usage: gnucash-refresh [OPTIONS]
+
+Synchronizes local copies of $GNUCASH_FILE and related budget spreadsheets
+from Google Drive ($REMOTE_BASE_PATH) and launches GnuCash.
+
+Options:
+  -r, --refresh-only    Refresh files from Google Drive without launching GnuCash
+  -o, --open-ods        Open the budget spreadsheets in LibreOffice Calc
+  -f, --open-folder     Open the local GnuCash directory in file manager
+  -s, --status          Check and display sync status between local and remote
+  -n, --dry-run         Simulate refresh actions without copying files
+  --force               Force copy remote files even if local files are newer
+  -h, --help            Show this help message
+
+Configuration file:
+  $CONF_FILE
+  $CONF_LOCAL (optional machine-specific override)
+EOF
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -r|--refresh-only)
+            REFRESH_ONLY=true
+            shift
+            ;;
+        -o|--open-ods)
+            OPEN_ODS=true
+            shift
+            ;;
+        -f|--open-folder)
+            OPEN_FOLDER=true
+            shift
+            ;;
+        -s|--status)
+            SHOW_STATUS=true
+            shift
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+notify() {
+    local urgency="$1"
+    local title="$2"
+    local message="$3"
+    if [ "$NOTIFY" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -u "$urgency" -i gnucash-icon "$title" "$message" 2>/dev/null || true
+    fi
+}
+
+# 2. Lock setup
+LOCK_FILE="/tmp/gnucash-refresh-$USER.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another gnucash-refresh process is already active."
+    notify "normal" "GnuCash Refresh" "Another sync operation is already in progress."
+    exit 0
+fi
+
+# 3. Check if GnuCash currently has the book open
+check_gnucash_active() {
+    if pgrep -x gnucash >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # If GnuCash is not running but a leftover .LCK file exists, it is stale
+    local lock_path="$LOCAL_DIR/${GNUCASH_FILE}.LCK"
+    if [ -f "$lock_path" ]; then
+        echo "[INFO] Removing stale GnuCash lock file ($lock_path) from previous session."
+        rm -f "$lock_path"
+    fi
+    return 1
+}
+
+if check_gnucash_active; then
+    echo "[WARNING] GnuCash is currently running with $GNUCASH_FILE open."
+    notify "critical" "GnuCash Active" "GnuCash currently has $GNUCASH_FILE open. Please save and close GnuCash before refreshing."
+    if [ "$REFRESH_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
+        exit 1
+    fi
+    # If user wanted to open GnuCash, it is already open
+    exit 0
+fi
+
+# 4. Ensure Google Drive is mounted or accessible
+ensure_mount() {
+    if mountpoint -q "$GDRIVE_MOUNT"; then
+        return 0
+    fi
+
+    echo "Google Drive is not mounted at $GDRIVE_MOUNT. Attempting to mount..."
+    if [ -x "$HOME/bin/Rclone" ]; then
+        "$HOME/bin/Rclone" >/dev/null 2>&1 || true
+        # Wait up to 5 seconds for mountpoint
+        for _ in {1..10}; do
+            if mountpoint -q "$GDRIVE_MOUNT"; then
+                echo "Mounted successfully."
+                return 0
+            fi
+            sleep 0.5
+        done
+    fi
+
+    if ! mountpoint -q "$GDRIVE_MOUNT"; then
+        echo "[ERROR] Google Drive mount ($GDRIVE_MOUNT) is unavailable."
+        notify "critical" "Google Drive Error" "Google Drive is not mounted at $GDRIVE_MOUNT. Please launch Rclone first."
+        return 1
+    fi
+    return 0
+}
+
+# 5. Locate Remote Source Directory
+find_remote_dir() {
+    local base_dir="$GDRIVE_MOUNT/$REMOTE_BASE_PATH"
+
+    if [ ! -d "$base_dir" ]; then
+        echo "[ERROR] Remote base path does not exist: $base_dir"
+        return 1
+    fi
+
+    # 1. Explicit folder specified in configuration
+    if [ -n "$REMOTE_FOLDER" ]; then
+        local explicit_path="$base_dir/$REMOTE_FOLDER"
+        if [ -d "$explicit_path" ]; then
+            echo "$explicit_path"
+            return 0
+        else
+            echo "[WARNING] Configured REMOTE_FOLDER not found: $explicit_path" >&2
+        fi
+    fi
+
+    # 2. Check for exact folder named Gutz_joint_gnucash
+    if [ -d "$base_dir/Gutz_joint_gnucash" ] && [ -f "$base_dir/Gutz_joint_gnucash/$GNUCASH_FILE" ]; then
+        echo "$base_dir/Gutz_joint_gnucash"
+        return 0
+    fi
+
+    # 3. Auto-detect newest folder containing the GnuCash file
+    local detected
+    detected=$(find "$base_dir" -maxdepth 2 -mindepth 2 -name "$GNUCASH_FILE" -exec dirname {} + 2>/dev/null | sort -r | head -n 1)
+    if [ -n "$detected" ] && [ -d "$detected" ]; then
+        echo "$detected"
+        return 0
+    fi
+
+    return 1
+}
+
+# 6. Safety Backup
+backup_file() {
+    local src_file="$1"
+    local fname
+    fname="$(basename "$src_file")"
+    mkdir -p "$BACKUP_DIR"
+
+    local ts
+    ts=$(date '+%Y%m%d_%H%M%S')
+    local bak_file="$BACKUP_DIR/${fname}.${ts}.bak"
+
+    cp -p "$src_file" "$bak_file"
+    echo "  [Backup] Created safety copy: $(basename "$bak_file")"
+
+    # Prune old backups keeping MAX_BACKUPS
+    if [ "${MAX_BACKUPS:-10}" -gt 0 ]; then
+        local count
+        count=$(find "$BACKUP_DIR" -maxdepth 1 -name "${fname}.*.bak" | wc -l)
+        if [ "$count" -gt "$MAX_BACKUPS" ]; then
+            find "$BACKUP_DIR" -maxdepth 1 -name "${fname}.*.bak" -printf "%T@ %p\n" | \
+                sort -n | head -n "$((count - MAX_BACKUPS))" | cut -d' ' -f2- | xargs -r rm -f
+        fi
+    fi
+}
+
+# Handle Open Folder
+if [ "$OPEN_FOLDER" = true ]; then
+    mkdir -p "$LOCAL_DIR"
+    xdg-open "$LOCAL_DIR" >/dev/null 2>&1 &
+    exit 0
+fi
+
+# Ensure mount before checking files
+if ! ensure_mount; then
+    exit 1
+fi
+
+REMOTE_DIR=$(find_remote_dir) || {
+    echo "[ERROR] Could not locate remote folder containing $GNUCASH_FILE in $GDRIVE_MOUNT/$REMOTE_BASE_PATH"
+    notify "critical" "GnuCash Refresh Failed" "Could not find remote folder containing $GNUCASH_FILE in Google Drive."
+    exit 1
+}
+
+echo "=========================================================="
+echo " GnuCash Joint Auto-Refresh Launcher"
+echo " Remote Source : $REMOTE_DIR"
+echo " Local Target  : $LOCAL_DIR"
+echo "=========================================================="
+
+ALL_TARGET_FILES=("$GNUCASH_FILE" "${SPREADSHEET_FILES[@]}")
+
+# Handle Status Display
+if [ "$SHOW_STATUS" = true ]; then
+    echo "--- File Sync Status ---"
+    for item in "${ALL_TARGET_FILES[@]}"; do
+        local_path="$LOCAL_DIR/$item"
+        remote_path="$REMOTE_DIR/$item"
+
+        if [ ! -f "$remote_path" ]; then
+            echo "  [-] $item: Remote file NOT found"
+            continue
+        fi
+
+        if [ ! -f "$local_path" ]; then
+            echo "  [+] $item: Local file MISSING (remote available)"
+            continue
+        fi
+
+        local_mtime=$(stat -c %Y "$local_path")
+        remote_mtime=$(stat -c %Y "$remote_path")
+        local_size=$(stat -c %s "$local_path")
+        remote_size=$(stat -c %s "$remote_path")
+
+        if [ "$local_size" -eq "$remote_size" ] && cmp -s "$local_path" "$remote_path"; then
+            echo "  [=] $item: Identical (in sync)"
+        elif [ "$remote_mtime" -gt "$local_mtime" ]; then
+            echo "  [>] $item: Remote is NEWER (update available)"
+        else
+            echo "  [<] $item: Local is NEWER or DIFFERENT from remote"
+        fi
+    done
+    exit 0
+fi
+
+mkdir -p "$LOCAL_DIR"
+
+UPDATED_COUNT=0
+UPDATED_NAMES=()
+
+for item in "${ALL_TARGET_FILES[@]}"; do
+    local_path="$LOCAL_DIR/$item"
+    remote_path="$REMOTE_DIR/$item"
+
+    if [ ! -f "$remote_path" ]; then
+        echo "[WARNING] Remote file not found: $item (skipping)"
+        continue
+    fi
+
+    NEEDS_COPY=false
+
+    if [ ! -f "$local_path" ]; then
+        NEEDS_COPY=true
+        echo "Local file missing: $item -> downloading from Google Drive"
+    else
+        # Compare files
+        if ! cmp -s "$local_path" "$remote_path"; then
+            local_mtime=$(stat -c %Y "$local_path")
+            remote_mtime=$(stat -c %Y "$remote_path")
+
+            if [ "$remote_mtime" -gt "$local_mtime" ] || [ "$FORCE" = true ]; then
+                NEEDS_COPY=true
+                echo "Update available for $item (remote is newer)"
+            elif [ "$local_mtime" -gt "$remote_mtime" ]; then
+                echo "[NOTICE] Local copy of $item is newer than remote. Use --force to overwrite."
+            else
+                NEEDS_COPY=true
+                echo "Differences detected in $item (sizes/contents differ)"
+            fi
+        fi
+    fi
+
+    if [ "$NEEDS_COPY" = true ]; then
+        if [ "$DRY_RUN" = true ]; then
+            echo "  [Dry Run] Would update: $item"
+            UPDATED_COUNT=$((UPDATED_COUNT + 1))
+            UPDATED_NAMES+=("$item")
+            continue
+        fi
+
+        # Backup local version before replacing
+        if [ -f "$local_path" ] && [ "$CREATE_BACKUP" = true ]; then
+            backup_file "$local_path"
+        fi
+
+        # Copy remote file to local directory preserving timestamps
+        cp -p "$remote_path" "$local_path"
+        echo "  [Updated] Successfully refreshed: $item"
+        UPDATED_COUNT=$((UPDATED_COUNT + 1))
+        UPDATED_NAMES+=("$item")
+    fi
+done
+
+# Notifications
+if [ "$UPDATED_COUNT" -gt 0 ]; then
+    summary_list=$(IFS=', '; echo "${UPDATED_NAMES[*]}")
+    echo "Refreshed $UPDATED_COUNT file(s): $summary_list"
+    notify "normal" "GnuCash Joint Refreshed" "Refreshed $UPDATED_COUNT file(s) from Google Drive:\n$summary_list"
+else
+    echo "All local files are already up to date."
+    notify "low" "GnuCash Joint" "Local files are up to date with Google Drive."
+fi
+
+# Open ODS spreadsheets if requested
+if [ "$OPEN_ODS" = true ]; then
+    if command -v libreoffice >/dev/null 2>&1; then
+        echo "Opening budget spreadsheets in LibreOffice Calc..."
+        for ods in "${SPREADSHEET_FILES[@]}"; do
+            if [ -f "$LOCAL_DIR/$ods" ]; then
+                libreoffice "$LOCAL_DIR/$ods" >/dev/null 2>&1 &
+            fi
+        done
+    fi
+fi
+
+# Launch GnuCash unless --refresh-only was specified
+if [ "$REFRESH_ONLY" = false ] && [ "$DRY_RUN" = false ]; then
+    TARGET_GNUCASH="$LOCAL_DIR/$GNUCASH_FILE"
+    if [ ! -f "$TARGET_GNUCASH" ]; then
+        echo "[ERROR] Local GnuCash file not found: $TARGET_GNUCASH"
+        notify "critical" "GnuCash Launch Error" "File not found: $TARGET_GNUCASH"
+        exit 1
+    fi
+
+    echo "Launching GnuCash on $TARGET_GNUCASH..."
+
+    if [ "$SYNC_BACK_ON_EXIT" = true ]; then
+        # Run GnuCash in foreground to monitor exit, then sync back
+        gnucash "$TARGET_GNUCASH"
+
+        # Check if local file was modified during session
+        if [ -f "$TARGET_GNUCASH" ] && [ -d "$REMOTE_DIR" ]; then
+            if ! cmp -s "$TARGET_GNUCASH" "$REMOTE_DIR/$GNUCASH_FILE"; then
+                echo "Syncing updated GnuCash file back to Google Drive..."
+                cp -p "$TARGET_GNUCASH" "$REMOTE_DIR/$GNUCASH_FILE"
+                notify "normal" "GnuCash Joint Saved" "Updated $GNUCASH_FILE saved back to Google Drive."
+            fi
+        fi
+    else
+        # Launch GnuCash detached in background
+        nohup gnucash "$TARGET_GNUCASH" >/dev/null 2>&1 &
+    fi
+fi
+
+echo "Done."
+exit 0

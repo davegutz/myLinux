@@ -29,6 +29,8 @@ myLinux/
 │   │   ├── Rclone                        # Google Drive mount and VFS cache refresh automation
 │   │   ├── run_time.sh                   # Video duration / ffprobe inspector
 │   │   └── stripit.sh                    # Video filename sanitization tool
+│   ├── Desktop/
+│   │   └── GnuCash-Joint.desktop         # Desktop launcher/widget for GnuCash Joint with cloud refresh
 │   ├── .config/
 │   │   ├── alacritty/
 │   │   │   └── alacritty.toml            # Alacritty terminal settings (Catppuccin Mocha, JetBrains Mono)
@@ -36,6 +38,8 @@ myLinux/
 │   │   │   └── rclone.desktop            # Universal Google Drive mount on login (~/bin/Rclone)
 │   │   ├── fastfetch/
 │   │   │   └── config.jsonc              # Fastfetch system information card
+│   │   ├── gnucash/
+│   │   │   └── refresh-joint.conf        # Configuration for GnuCash Joint Google Drive sync
 │   │   ├── gtk-3.0/
 │   │   │   └── settings.ini              # GTK-3 dark mode enforcement
 │   │   └── gtk-4.0/
@@ -43,9 +47,12 @@ myLinux/
 │   └── .local/
 │       ├── bin/
 │       │   ├── gg                        # Launcher for Dave G's custom git_gui from myComputer
+│       │   ├── gnucash-refresh           # Safe cloud refresh engine & launcher for GnuCash & budget ODS
 │       │   ├── sys-update                # Universal package & flatpak updater (Arch + Ubuntu)
 │       │   └── dotfiles                  # myLinux repository management CLI (sync, daemon, autostart)
 │       └── share/
+│           ├── applications/
+│           │   └── GnuCash-Joint.desktop # App menu launcher & pinned panel widget
 │           └── gnucash/                  # GnuCash shared book settings
 │               └── books/
 │                   └── Gutz_joint.gnucash.gcm
@@ -126,6 +133,7 @@ Once deployed, the following utilities and aliases are available in any terminal
 | `reload` | Reloads `~/.bashrc` in the active shell |
 | `suspend` | Calls `suspend_until 14:30` |
 | `movmov` | Moves staged media to `/media/daveg/Lib/Movies` |
+| `gnucash-refresh` / `gnucash-joint` | Refreshes `Gutz_joint.gnucash` and budget `.ods` files from Google Drive and opens GnuCash |
 | `Rclone` | Mounts Google Drive (`gdrive:`) to `~/gdrive` with 50GB VFS cache and warms directory tree |
 | `cdmylinux` / `cdcomp` | Quickly changes directory to `myLinux` or `myComputer` |
 | `gs`, `ga`, `gc`, `gp`, `gl`, `gd` | Standard Git shortcuts (`status`, `add`, `commit`, `push`, `pull`, `diff`) |
@@ -226,6 +234,71 @@ dotfiles daemon disable
 > ```bash
 > loginctl enable-linger $USER
 > ```
+
+---
+
+## GnuCash Joint Auto-Refresh Desktop Widget
+
+A desktop widget / launcher and synchronization engine maintained via GNU Stow under `common/`. It refreshes local copies of the joint accounting book and budget spreadsheets from Google Drive before launching GnuCash.
+
+### Features:
+- **Cloud Synchronization**: Safely pulls latest versions of:
+  - `~/Documents/Gutz_joint_gnucash/Gutz_joint.gnucash`
+  - `budget avg less invest.ods`
+  - `categories_as_budget_20220101-20240301.ods`
+  from Google Drive (`~/gdrive/Finance remote/` or direct rclone).
+- **Automatic Directory Discovery**: Auto-detects the active/newest remote folder containing `Gutz_joint.gnucash` (e.g. `GnuCash 2026-0926-1015 remote` or `Gutz_joint_gnucash`). Can also be explicitly configured.
+- **Safety Pre-Backups**: Automatically creates timestamped copies of local files in `~/Documents/Gutz_joint_gnucash/.backups/` before applying any remote changes (retaining the 10 most recent backups).
+- **Concurrency & Stale Lock Protection**: Detects if GnuCash is actively running to prevent file corruption, and cleans up stale `.LCK` lock files left over from ungraceful shutdowns or system crashes.
+- **Desktop Widget & Actions**:
+  - Direct launcher on the Desktop (`~/Desktop/GnuCash-Joint.desktop`).
+  - System application menu launcher (`~/.local/share/applications/GnuCash-Joint.desktop`).
+  - Right-click desktop actions:
+    - **Refresh from Google Drive Only** (sync without launching)
+    - **Open GnuCash Folder** (opens local directory in file manager)
+    - **Open Budget Spreadsheets** (opens both `.ods` files in LibreOffice Calc)
+
+### Configuration (`~/.config/gnucash/refresh-joint.conf`):
+```bash
+# Target local directory and files
+LOCAL_DIR="$HOME/Documents/Gutz_joint_gnucash"
+GNUCASH_FILE="Gutz_joint.gnucash"
+SPREADSHEET_FILES=(
+    "budget avg less invest.ods"
+    "categories_as_budget_20220101-20240301.ods"
+)
+
+# Remote location on Google Drive
+GDRIVE_MOUNT="$HOME/gdrive"
+REMOTE_BASE_PATH="Finance remote"
+# Leave REMOTE_FOLDER empty to auto-detect newest folder
+REMOTE_FOLDER=""
+
+# Safety backups & notifications
+CREATE_BACKUP=true
+BACKUP_DIR="$LOCAL_DIR/.backups"
+MAX_BACKUPS=10
+NOTIFY=true
+```
+Create `~/.config/gnucash/refresh-joint.conf.local` for machine-specific overrides.
+
+### CLI Usage:
+```bash
+# Check current local vs remote synchronization status:
+gnucash-refresh --status
+
+# Simulate refresh without writing files:
+gnucash-refresh --dry-run
+
+# Refresh cloud files without opening GnuCash:
+gnucash-refresh --refresh-only
+
+# Open the two budget spreadsheets in LibreOffice Calc:
+gnucash-refresh --open-ods
+
+# Open the local documents directory:
+gnucash-refresh --open-folder
+```
 
 ---
 

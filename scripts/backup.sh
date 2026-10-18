@@ -42,6 +42,10 @@ MANAGED_FILES=(
     ".config/systemd/user/rclone-daily-backup.service"
     ".config/systemd/user/rclone-daily-backup.timer"
     ".local/bin/rclone-daily-backup"
+    ".config/gnucash/refresh-joint.conf"
+    ".local/bin/gnucash-refresh"
+    "Desktop/GnuCash-Joint.desktop"
+    ".local/share/applications/GnuCash-Joint.desktop"
 )
 
 backed_up_count=0

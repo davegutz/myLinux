@@ -26,6 +26,8 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 # suspend_until script in ~/bin
 alias suspend='suspend_until 14:30'
 alias movmov='mv /Public/* /media/daveg/Lib/Movies 2>/dev/null || true'
+alias gnucash-joint='gnucash-refresh'
+alias gnucash-refresh='gnucash-refresh'
 
 # --- Git Shortcuts ---
 alias gs='git status'
