@@ -32,7 +32,6 @@ MANAGED_FILES=(
     "bin/renameit.sh"
     "bin/renameit_check.sh"
     "bin/Rclone"
-    ".local/share/gnucash/stylesheets-2.0"
     ".local/share/gnucash/books/Gutz_joint.gnucash.gcm"
     ".config/autostart/rclone.desktop"
     ".config/autostart/firefox.desktop"

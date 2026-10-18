@@ -46,10 +46,9 @@ myLinux/
 │       │   ├── sys-update                # Universal package & flatpak updater (Arch + Ubuntu)
 │       │   └── dotfiles                  # myLinux repository management CLI (sync, daemon, autostart)
 │       └── share/
-│           └── gnucash/                  # GnuCash custom stylesheets and book settings
-│               ├── books/
-│               │   └── Gutz_joint.gnucash.gcm
-│               └── stylesheets-2.0
+│           └── gnucash/                  # GnuCash shared book settings
+│               └── books/
+│                   └── Gutz_joint.gnucash.gcm
 ├── autostart-cosmic/                     # CachyOS COSMIC desktop startup files (stowed to $HOME)
 │   └── .config/
 │       └── autostart/
