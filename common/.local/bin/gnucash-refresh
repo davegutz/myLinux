@@ -28,7 +28,7 @@ if [ -z "${SPREADSHEET_FILES+x}" ] || [ ${#SPREADSHEET_FILES[@]} -eq 0 ]; then
 fi
 GDRIVE_MOUNT="${GDRIVE_MOUNT:-$HOME/gdrive}"
 REMOTE_BASE_PATH="${REMOTE_BASE_PATH:-Finance remote}"
-REMOTE_FOLDER="${REMOTE_FOLDER:-}"
+REMOTE_FOLDER="${REMOTE_FOLDER:-Gutz_joint_gnucash}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
 CREATE_BACKUP="${CREATE_BACKUP:-true}"
 BACKUP_DIR="${BACKUP_DIR:-$LOCAL_DIR/.backups}"
@@ -49,7 +49,7 @@ usage() {
 Usage: gnucash-refresh [OPTIONS]
 
 Synchronizes local copies of $GNUCASH_FILE and related budget spreadsheets
-from Google Drive ($REMOTE_BASE_PATH) and launches GnuCash.
+exclusively from Google Drive ($REMOTE_BASE_PATH/$REMOTE_FOLDER) and launches GnuCash.
 
 Options:
   -r, --refresh-only    Refresh files from Google Drive without launching GnuCash
@@ -175,40 +175,16 @@ ensure_mount() {
     return 0
 }
 
-# 5. Locate Remote Source Directory
+# 5. Verify Dedicated Remote Source Directory
 find_remote_dir() {
-    local base_dir="$GDRIVE_MOUNT/$REMOTE_BASE_PATH"
+    local target_remote_dir="$GDRIVE_MOUNT/$REMOTE_BASE_PATH/$REMOTE_FOLDER"
 
-    if [ ! -d "$base_dir" ]; then
-        echo "[ERROR] Remote base path does not exist: $base_dir"
-        return 1
-    fi
-
-    # 1. Explicit folder specified in configuration
-    if [ -n "$REMOTE_FOLDER" ]; then
-        local explicit_path="$base_dir/$REMOTE_FOLDER"
-        if [ -d "$explicit_path" ]; then
-            echo "$explicit_path"
-            return 0
-        else
-            echo "[WARNING] Configured REMOTE_FOLDER not found: $explicit_path" >&2
-        fi
-    fi
-
-    # 2. Check for exact folder named Gutz_joint_gnucash
-    if [ -d "$base_dir/Gutz_joint_gnucash" ] && [ -f "$base_dir/Gutz_joint_gnucash/$GNUCASH_FILE" ]; then
-        echo "$base_dir/Gutz_joint_gnucash"
+    if [ -d "$target_remote_dir" ]; then
+        echo "$target_remote_dir"
         return 0
     fi
 
-    # 3. Auto-detect newest folder containing the GnuCash file
-    local detected
-    detected=$(find "$base_dir" -maxdepth 2 -mindepth 2 -name "$GNUCASH_FILE" -exec dirname {} + 2>/dev/null | sort -r | head -n 1)
-    if [ -n "$detected" ] && [ -d "$detected" ]; then
-        echo "$detected"
-        return 0
-    fi
-
+    echo "[ERROR] Dedicated remote folder does not exist: $target_remote_dir" >&2
     return 1
 }
 
@@ -250,8 +226,8 @@ if ! ensure_mount; then
 fi
 
 REMOTE_DIR=$(find_remote_dir) || {
-    echo "[ERROR] Could not locate remote folder containing $GNUCASH_FILE in $GDRIVE_MOUNT/$REMOTE_BASE_PATH"
-    notify "critical" "GnuCash Refresh Failed" "Could not find remote folder containing $GNUCASH_FILE in Google Drive."
+    echo "[ERROR] Dedicated remote folder not found: $GDRIVE_MOUNT/$REMOTE_BASE_PATH/$REMOTE_FOLDER"
+    notify "critical" "GnuCash Refresh Failed" "Dedicated remote folder not found: $REMOTE_BASE_PATH/$REMOTE_FOLDER"
     exit 1
 }
 

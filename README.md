@@ -246,8 +246,8 @@ A desktop widget / launcher and synchronization engine maintained via GNU Stow u
   - `~/Documents/Gutz_joint_gnucash/Gutz_joint.gnucash`
   - `budget avg less invest.ods`
   - `categories_as_budget_20220101-20240301.ods`
-  from Google Drive (`~/gdrive/Finance remote/` or direct rclone).
-- **Automatic Directory Discovery**: Auto-detects the active/newest remote folder containing `Gutz_joint.gnucash` (e.g. `GnuCash 2026-0926-1015 remote` or `Gutz_joint_gnucash`). Can also be explicitly configured.
+  from Google Drive exclusively (`gdrive:Finance remote/Gutz_joint_gnucash`).
+- **Dedicated Remote Folder**: Directly targets `Finance remote/Gutz_joint_gnucash` with no searching or scanning across other cloud directories.
 - **Safety Pre-Backups**: Automatically creates timestamped copies of local files in `~/Documents/Gutz_joint_gnucash/.backups/` before applying any remote changes (retaining the 10 most recent backups).
 - **Concurrency & Stale Lock Protection**: Detects if GnuCash is actively running to prevent file corruption, and cleans up stale `.LCK` lock files left over from ungraceful shutdowns or system crashes.
 - **Desktop Widget & Actions**:
@@ -268,11 +268,10 @@ SPREADSHEET_FILES=(
     "categories_as_budget_20220101-20240301.ods"
 )
 
-# Remote location on Google Drive
+# Dedicated remote folder on Google Drive
 GDRIVE_MOUNT="$HOME/gdrive"
 REMOTE_BASE_PATH="Finance remote"
-# Leave REMOTE_FOLDER empty to auto-detect newest folder
-REMOTE_FOLDER=""
+REMOTE_FOLDER="Gutz_joint_gnucash"
 
 # Safety backups & notifications
 CREATE_BACKUP=true
