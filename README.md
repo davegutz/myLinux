@@ -68,6 +68,50 @@ The desktop launcher (`~/Desktop/GnuCash-Joint.desktop`) manages bidirectional s
 
 ---
 
+### 4. Google Drive & Rclone Setup (`rclone.conf`)
+The `~/bin/Rclone` mount and daily backup rely on an active `gdrive:` remote configured in `~/.config/rclone/rclone.conf`.
+
+> [!IMPORTANT]
+> **Why `rclone.conf` is NOT included in this repository:**
+> `rclone.conf` contains sensitive authentication secrets—including active OAuth access tokens, refresh tokens, and private client secrets. Because GitHub repositories must never store credentials or private tokens, `rclone.conf` is intentionally excluded from the `myLinux` configuration and must be set up or copied locally on each machine.
+
+#### Keeping vs. Updating `token =` in `rclone.conf`:
+* **Default Setup (No Custom Client ID)**: **Keep** `token = ...`. It holds your Google OAuth login session and refresh token. Without it, Rclone cannot authenticate.
+* **Custom Google Cloud Client ID (Recommended to avoid 403 Rate Limits)**: You **cannot reuse the old token**, as Google OAuth tokens are strictly bound to the specific Client ID that created them.
+  1. Add your custom credentials to `~/.config/rclone/rclone.conf`:
+     ```ini
+     [gdrive]
+     type = drive
+     scope = drive
+     client_id = your_client_id.apps.googleusercontent.com
+     client_secret = your_client_secret
+     ```
+  2. Run the reconnect command (note the trailing colon `:`):
+     ```bash
+     rclone config reconnect gdrive:
+     ```
+     *(Omitting the trailing `:` treats `gdrive` as a local path and triggers `Error: backend doesn't support reconnect or authorize`)*.
+  3. Complete authorization in your browser. Rclone will **automatically overwrite `token = ...`** with a new, valid token linked to your Client ID.
+  4. Restart your active mount so it loads the new token:
+     ```bash
+     fusermount3 -u ~/gdrive && Rclone
+     ```
+     *(Rclone does not reload tokens while actively mounted. If you skip restarting the mount, existing file operations like `ls` or `rm` will fail with `Input/output error` / HTTP 401)*.
+
+#### Thunar File Manager Quick Fixes (Sluggish or Freezing Mounts):
+If browsing `~/gdrive` in Thunar is slow or hangs:
+* **Disable Thumbnails in Thunar**: Thunar's thumbnail daemon (`tumblerd`) attempts to download pieces of remote video/image files across FUSE to render previews, which blocks the UI.
+  * In Thunar: go to **Edit** → **Preferences** → **Display** tab.
+  * Set **Show thumbnails** to **Never** (or **Local files only**).
+* **Tune Rclone Mount Options (`~/bin/Rclone`)**:
+  * Once a personal Google Client ID is configured, remove `--tpslimit 5` and `--tpslimit-burst 5` (which bottlenecks requests to 5 per second).
+  * Add `--attr-timeout 1h` and `--no-checksum` to speed up directory navigation.
+* **Alternative File Managers**:
+  * On KDE Plasma, **Dolphin** (`sudo apt install dolphin`) handles remote network I/O asynchronously in worker threads and will not lock the window.
+  * **PCManFM-Qt** (`pcmanfm-qt ~/gdrive`) is already installed on the system and is significantly lighter.
+
+---
+
 ## Key Objectives
 
 1. **Visual Parity**: Maintain an identical look and feel (terminal colors, fonts, prompt, window padding, GTK/Qt dark themes) across all laptops, workstations, and dual-boot instances.
