@@ -485,9 +485,9 @@ debit_width=105
 credit_width=105
 
 [Window 1]
-PageCount=2
+PageCount=3
 FirstPage=1
-PageOrder=2;1;
+PageOrder=2;1;3;
 WindowPosition=0;0;
 WindowGeometry=1920;1018;
 WindowMaximized=true
@@ -502,7 +502,7 @@ AccountTypes=-1
 ShowHidden=false
 ShowZeroTotal=true
 ShowUnused=true
-SelectedAccount=Unspecified
+SelectedAccount=Assets:Katherine Checking *1871
 OpenAccount1=Assets
 OpenAccount2=Assets:FREE REWARDS CK, *2680
 OpenAccount3=Joint Expenses
@@ -511,6 +511,15 @@ OpenAccount5=Liabilities
 NumberOfOpenAccounts=5
 
 [Page 2]
+PageType=GncPluginPageRegister
+PageName=Katherine Checking *1871
+RegisterType=Account
+AccountName=Assets:Katherine Checking *1871
+AccountGuid=81d2909422804bfdaed7ccacb31c74b9
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 3]
 PageType=GncPluginPageRegister
 PageName=Chase Prime CC D *8079
 RegisterType=Account

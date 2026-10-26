@@ -1,6 +1,11 @@
 #!/bin/bash
 MOUNT_DIR="$HOME/gdrive"
 
+# Clean up any stale or disconnected FUSE mountpoint before checking
+if ! mountpoint -q "$MOUNT_DIR" 2>/dev/null; then
+    fusermount3 -u -z "$MOUNT_DIR" 2>/dev/null || true
+fi
+
 # 1. Check if already mounted
 if mountpoint -q "$MOUNT_DIR"; then
     echo "Google Drive is already mounted at $MOUNT_DIR."
@@ -17,23 +22,40 @@ fi
 # 2. Ensure target mount directory exists
 mkdir -p "$MOUNT_DIR"
 
-# 3. Mount Google Drive in background
+# 3. Mount Google Drive in background (prefer systemd-run if available, else standard background)
 echo "Mounting Google Drive to $MOUNT_DIR..."
-rclone mount gdrive: "$MOUNT_DIR" \
-    --vfs-cache-mode full \
-    --vfs-cache-max-size 50G \
-    --vfs-cache-max-age 24h \
-    --dir-cache-time 1000h \
-    --drive-chunk-size 128M \
-    --buffer-size 64M \
-    --poll-interval 15s \
-    --multi-thread-streams 4 \
-	--attr-timeout 1h \
-    --no-checksum \
-    --rc \
-    --rc-no-auth >/dev/null 2>&1 &
-RCLONE_PID=$!
-disown "$RCLONE_PID"
+if command -v systemd-run >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
+    systemctl --user stop rclone-mount.service 2>/dev/null || true
+    systemd-run --user --unit=rclone-mount rclone mount gdrive: "$MOUNT_DIR" \
+        --vfs-cache-mode full \
+        --vfs-cache-max-size 50G \
+        --vfs-cache-max-age 24h \
+        --dir-cache-time 1000h \
+        --drive-chunk-size 128M \
+        --buffer-size 64M \
+        --poll-interval 15s \
+        --multi-thread-streams 4 \
+        --attr-timeout 1s \
+        --no-checksum \
+        --rc \
+        --rc-no-auth >/dev/null 2>&1
+else
+    nohup rclone mount gdrive: "$MOUNT_DIR" \
+        --vfs-cache-mode full \
+        --vfs-cache-max-size 50G \
+        --vfs-cache-max-age 24h \
+        --dir-cache-time 1000h \
+        --drive-chunk-size 128M \
+        --buffer-size 64M \
+        --poll-interval 15s \
+        --multi-thread-streams 4 \
+        --attr-timeout 1s \
+        --no-checksum \
+        --rc \
+        --rc-no-auth </dev/null >/dev/null 2>&1 &
+    RCLONE_PID=$!
+    disown "$RCLONE_PID"
+fi
 
 # 4. Wait up to 15 seconds for mountpoint to become ready
 MOUNTED=false

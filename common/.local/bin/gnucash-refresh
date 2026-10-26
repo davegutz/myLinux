@@ -376,12 +376,17 @@ check_cloud_lock() {
         return 0
     fi
 
+    # Refresh VFS cache for this remote directory if rclone RC is available
+    if [ -d "$REMOTE_DIR" ] && command -v rclone >/dev/null 2>&1; then
+        rclone rc vfs/refresh dir="$REMOTE_BASE_PATH/$REMOTE_FOLDER" >/dev/null 2>&1 || true
+    fi
+
     local lock_path="$REMOTE_DIR/.session_lock"
     if [ ! -f "$lock_path" ]; then
         return 0
     fi
 
-    # Read token contents
+    # Read token contents safely
     local lock_machine=""
     local lock_user=""
     local lock_pid=""
@@ -396,7 +401,17 @@ check_cloud_lock() {
             epoch) lock_epoch="$value" ;;
             time) lock_time="$value" ;;
         esac
-    done < "$lock_path"
+    done < "$lock_path" 2>/dev/null || true
+
+    # If the file exists in directory listing but cannot be read or has no machine header (e.g. stale ghost cache / EIO)
+    if [ -z "$lock_machine" ]; then
+        echo "[INFO] Cleaning unreadable or invalid cloud lock entry ($lock_path)."
+        rm -f "$lock_path" 2>/dev/null || true
+        if command -v rclone >/dev/null 2>&1; then
+            rclone rc vfs/forget file="$REMOTE_BASE_PATH/$REMOTE_FOLDER/.session_lock" >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
 
     local my_hostname
     my_hostname=$(hostname)
@@ -465,10 +480,14 @@ release_cloud_lock() {
         return 0
     fi
 
-    if [ -n "$CLOUD_LOCK_FILE" ] && [ -f "$CLOUD_LOCK_FILE" ]; then
-        if grep -q "machine=$(hostname)" "$CLOUD_LOCK_FILE" 2>/dev/null; then
-            rm -f "$CLOUD_LOCK_FILE"
+    local lock_path="${CLOUD_LOCK_FILE:-$REMOTE_DIR/.session_lock}"
+    if [ -f "$lock_path" ]; then
+        if grep -q "machine=$(hostname)" "$lock_path" 2>/dev/null; then
+            rm -f "$lock_path" 2>/dev/null || true
             echo "[Lock] Released cloud session lock on Google Drive."
+            if command -v rclone >/dev/null 2>&1; then
+                rclone rc vfs/forget file="$REMOTE_BASE_PATH/$REMOTE_FOLDER/.session_lock" >/dev/null 2>&1 || true
+            fi
         fi
     fi
 }
@@ -496,7 +515,10 @@ REMOTE_DIR=$(find_remote_dir) || {
 # Handle Force Unlock
 if [ "$FORCE_UNLOCK" = true ]; then
     if [ -f "$REMOTE_DIR/.session_lock" ]; then
-        rm -f "$REMOTE_DIR/.session_lock"
+        rm -f "$REMOTE_DIR/.session_lock" 2>/dev/null || true
+        if command -v rclone >/dev/null 2>&1; then
+            rclone rc vfs/forget file="$REMOTE_BASE_PATH/$REMOTE_FOLDER/.session_lock" >/dev/null 2>&1 || true
+        fi
         echo "Successfully unlocked Google Drive repository ($REMOTE_DIR/.session_lock removed)."
         notify "normal" "GnuCash Cloud Lock" "Successfully removed cloud session lock from Google Drive."
     else
@@ -515,10 +537,19 @@ show_status() {
     echo " Local Target  : $LOCAL_DIR"
     echo "=========================================================="
     echo "--- Cloud Lock Status ---"
-    if [ -f "$REMOTE_DIR/.session_lock" ]; then
+    if [ -d "$REMOTE_DIR" ] && command -v rclone >/dev/null 2>&1; then
+        rclone rc vfs/refresh dir="$REMOTE_BASE_PATH/$REMOTE_FOLDER" >/dev/null 2>&1 || true
+    fi
+    if [ -s "$REMOTE_DIR/.session_lock" ] && grep -q "machine=" "$REMOTE_DIR/.session_lock" 2>/dev/null; then
         echo "  [LOCKED] Active session lock on Google Drive:"
-        sed 's/^/    /' "$REMOTE_DIR/.session_lock"
+        sed 's/^/    /' "$REMOTE_DIR/.session_lock" 2>/dev/null || true
     else
+        if [ -f "$REMOTE_DIR/.session_lock" ]; then
+            rm -f "$REMOTE_DIR/.session_lock" 2>/dev/null || true
+            if command -v rclone >/dev/null 2>&1; then
+                rclone rc vfs/forget file="$REMOTE_BASE_PATH/$REMOTE_FOLDER/.session_lock" >/dev/null 2>&1 || true
+            fi
+        fi
         echo "  [UNLOCKED] No active session lock on Google Drive."
     fi
     echo ""
@@ -739,7 +770,15 @@ if [ ! -f "$TARGET_GNUCASH" ]; then
     exit 1
 fi
 
+CLEANUP_DONE=false
 cleanup_session() {
+    # Disable exit-on-error so transient FUSE or network hiccups cannot kill cleanup
+    set +e
+    if [ "$CLEANUP_DONE" = true ]; then
+        return 0
+    fi
+    CLEANUP_DONE=true
+
     # If GnuCash is still running (e.g. user closed the terminal window, pressed Ctrl+C, or sent SIGHUP)
     if [ -n "${GNUCASH_PID:-}" ] && kill -0 "$GNUCASH_PID" 2>/dev/null; then
         echo ""
@@ -759,17 +798,20 @@ cleanup_session() {
             local l_file="$LOCAL_DIR/$f"
             local r_file="$REMOTE_DIR/$f"
             if [ -f "$l_file" ] && [ -d "$REMOTE_DIR" ]; then
-                if ! cmp -s "$l_file" "$r_file"; then
+                if ! cmp -s "$l_file" "$r_file" 2>/dev/null; then
                     local l_mtime
                     local r_mtime
-                    l_mtime=$(stat -c %Y "$l_file")
+                    l_mtime=$(stat -c %Y "$l_file" 2>/dev/null || echo 0)
                     r_mtime=$(stat -c %Y "$r_file" 2>/dev/null || echo 0)
                     if [ "$l_mtime" -gt "$r_mtime" ] || [ "$FORCE" = true ]; then
                         backup_remote_file "$r_file"
-                        cp -p "$l_file" "$r_file"
-                        local now_str
-                        now_str=$(date '+%Y-%m-%d %H:%M:%S')
-                        echo "[$now_str] [Exit Sync] Saved final $f -> Google Drive"
+                        if cp -p "$l_file" "$r_file" 2>/dev/null; then
+                            local now_str
+                            now_str=$(date '+%Y-%m-%d %H:%M:%S')
+                            echo "[$now_str] [Exit Sync] Saved final $f -> Google Drive"
+                        else
+                            echo "[WARNING] Failed to sync $f to Google Drive during exit cleanup."
+                        fi
                     fi
                 fi
             fi
@@ -794,7 +836,7 @@ GNUCASH_PID=$!
 declare -A LAST_MTIMES
 for f in "${ALL_TARGET_FILES[@]}"; do
     if [ -f "$LOCAL_DIR/$f" ]; then
-        LAST_MTIMES["$f"]=$(stat -c %Y "$LOCAL_DIR/$f")
+        LAST_MTIMES["$f"]=$(stat -c %Y "$LOCAL_DIR/$f" 2>/dev/null || echo 0)
     else
         LAST_MTIMES["$f"]=0
     fi
@@ -818,7 +860,7 @@ watch_and_sync() {
             local l_file="$LOCAL_DIR/$f"
             if [ -f "$l_file" ]; then
                 local current_mtime
-                current_mtime=$(stat -c %Y "$l_file")
+                current_mtime=$(stat -c %Y "$l_file" 2>/dev/null || echo 0)
                 if [ "$current_mtime" -gt "${LAST_MTIMES["$f"]}" ]; then
                     MODIFIED_ITEMS+=("$f")
                 fi
@@ -835,14 +877,17 @@ watch_and_sync() {
                 local r_file="$REMOTE_DIR/$f"
 
                 if [ -f "$l_file" ] && [ -d "$REMOTE_DIR" ]; then
-                    if ! cmp -s "$l_file" "$r_file"; then
+                    if ! cmp -s "$l_file" "$r_file" 2>/dev/null; then
                         backup_remote_file "$r_file"
-                        cp -p "$l_file" "$r_file"
-                        LAST_MTIMES["$f"]=$(stat -c %Y "$l_file")
-                        PUSHED_NAMES+=("$f")
-                        local now_str
-                        now_str=$(date '+%Y-%m-%d %H:%M:%S')
-                        echo "[$now_str] [Save Sync] Synced $f -> Google Drive"
+                        if cp -p "$l_file" "$r_file" 2>/dev/null; then
+                            LAST_MTIMES["$f"]=$(stat -c %Y "$l_file" 2>/dev/null || echo 0)
+                            PUSHED_NAMES+=("$f")
+                            local now_str
+                            now_str=$(date '+%Y-%m-%d %H:%M:%S')
+                            echo "[$now_str] [Save Sync] Synced $f -> Google Drive"
+                        else
+                            echo "[WARNING] Failed to sync $f to Google Drive."
+                        fi
                     fi
                 fi
             done
@@ -862,7 +907,12 @@ else
     wait "$GNUCASH_PID" 2>/dev/null || true
 fi
 
-# Normal termination triggers trap cleanup_session
+# GnuCash has closed: immediately perform final sync and release cloud lock
+cleanup_session
+
+# Disarm traps so cleanup_session is not called again on exit
+trap - EXIT INT TERM HUP
+
 echo ""
 echo "GnuCash session ended."
 if [ -t 1 ] && [ "${HOLD_TERMINAL:-true}" = true ]; then

@@ -12,7 +12,7 @@ To set up a fresh Linux installation with full environment parity, configuration
 ```bash
 # 1. Clone the repository into your GitHub directory:
 mkdir -p ~/Documents/GitHub && cd ~/Documents/GitHub
-git clone https://github.com/davegutz/myLinux.git
+git clone https://github.com/davegutz/myLinux.git   # or: git clone git@github.com:davegutz/myLinux.git
 cd myLinux
 
 # 2. Run the automated bootstrap manager:
@@ -25,13 +25,48 @@ source ~/.bashrc
 ---
 
 ### 2. Refreshing & Synchronizing Existing Machines
-Whenever you make updates on one PC (e.g. Lubuntu or CachyOS), sync them seamlessly across all other machines:
+Whenever you make configuration changes on one machine, publish them to GitHub and sync across your other installations:
+
+#### Step 1: Push Updates to GitHub (Handling 2FA)
+Because GitHub accounts with **Two-Factor Authentication (2FA)** reject plain account passwords over HTTPS, use one of the standard GitHub authentication methods:
+
+* **Option A: SSH Key Authentication (Recommended for terminal `git push`)**
+  Configure SSH once on each machine so `git push` works seamlessly without credential prompts:
+  1. Generate an SSH key if you haven't already:
+     ```bash
+     ssh-keygen -t ed25519 -C "davegutz@alum.mit.edu"
+     ```
+  2. Copy your public key to clipboard or terminal output:
+     ```bash
+     cat ~/.ssh/id_ed25519.pub
+     ```
+  3. Add the key on GitHub: **Settings** → **SSH and GPG keys** → **New SSH key**.
+  4. Ensure your repository uses the SSH remote URL:
+     ```bash
+     git -C ~/Documents/GitHub/myLinux remote set-url origin git@github.com:davegutz/myLinux.git
+     ```
+  5. Commit and push normally:
+     ```bash
+     git add -A && git commit -m "Describe your update"
+     git push
+     ```
+
+* **Option B: Personal Access Token (PAT) with Git Credential Helper**
+  1. On GitHub: navigate to **Settings** → **Developer Settings** → **Personal access tokens** → **Tokens (classic)**.
+  2. Generate a new token with the `repo` scope.
+  3. Enable credential storage so you only enter the token once:
+     ```bash
+     git config --global credential.helper store
+     ```
+  4. Run `git push`, enter your GitHub username, and paste the Personal Access Token into the password prompt.
+
+* **Option C: GitHub Web UI (Quick edits without terminal auth)**
+  For quick script or config tweaks, edit the file directly on [github.com/davegutz/myLinux](https://github.com/davegutz/myLinux) in your browser and click **Commit changes**.
+
+#### Step 2: Pull and Apply Updates on Other Machines
+On any of your other computers, pull the latest commits and automatically re-stow all configurations:
 
 ```bash
-# On the computer with new changes:
-git push
-
-# On your other computer(s):
 dotfiles sync         # (or 'mylinux-sync')
 ```
 
@@ -105,7 +140,7 @@ If browsing `~/gdrive` in Thunar is slow or hangs:
   * Set **Show thumbnails** to **Never** (or **Local files only**).
 * **Tune Rclone Mount Options (`~/bin/Rclone`)**:
   * Once a personal Google Client ID is configured, remove `--tpslimit 5` and `--tpslimit-burst 5` (which bottlenecks requests to 5 per second).
-  * Add `--attr-timeout 1h` and `--no-checksum` to speed up directory navigation.
+  * Use `--attr-timeout 1s` and `--no-checksum` for quick directory responsiveness while keeping file updates/locks synchronized across machines.
 * **Alternative File Managers**:
   * On KDE Plasma, **Dolphin** (`sudo apt install dolphin`) handles remote network I/O asynchronously in worker threads and will not lock the window.
   * **PCManFM-Qt** (`pcmanfm-qt ~/gdrive`) is already installed on the system and is significantly lighter.
@@ -208,7 +243,7 @@ To configure a new Linux install (or align an existing one):
 # 1. Clone the repository into your standard GitHub directory:
 mkdir -p ~/Documents/GitHub
 cd ~/Documents/GitHub
-git clone https://github.com/davegutz/myLinux.git   # or your remote path
+git clone https://github.com/davegutz/myLinux.git   # or: git clone git@github.com:davegutz/myLinux.git
 cd myLinux
 
 # 2. Run the bootstrap manager:
