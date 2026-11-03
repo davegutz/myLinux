@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""
+finance-sleep-lock - Automated security lock daemon on system sleep/suspend
+Listens for systemd logind PrepareForSleep signal over D-Bus and locks Cryptomator & VeraCrypt.
+Managed by GNU Stow via myLinux
+"""
+
+import sys
+import os
+import subprocess
+import time
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+
+LOG_DIR = os.path.expanduser("~/.local/state/security")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "sleep-lock.log")
+
+def log(msg):
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    formatted = f"[{ts}] {msg}"
+    print(formatted, flush=True)
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(formatted + "\n")
+    except Exception:
+        pass
+
+def lock_financial_vaults():
+    log("System is preparing to sleep. Securing financial records...")
+
+    # 1. Check & cleanly unmount VeraCrypt if mounted
+    try:
+        res = subprocess.run(["mountpoint", "-q", "/media/veracrypt1"], check=False)
+        if res.returncode == 0:
+            log("VeraCrypt USB volume detected at /media/veracrypt1. Flushing & dismounting...")
+            subprocess.run(["sync", "-f", "/media/veracrypt1"], check=False)
+            subprocess.run(["veracrypt", "-d", "/media/veracrypt1"], check=False)
+            log("VeraCrypt volume dismounted.")
+    except Exception as e:
+        log(f"Error dismounting VeraCrypt: {e}")
+
+    # 2. Check & unmount Cryptomator FUSE mount
+    vault_mount = os.path.expanduser("~/.local/share/Cryptomator/mnt/FinanceVault")
+    try:
+        res = subprocess.run(["mountpoint", "-q", vault_mount], check=False)
+        if res.returncode == 0:
+            log(f"Cryptomator mount active at {vault_mount}. Unmounting...")
+            subprocess.run(["fusermount3", "-u", vault_mount], check=False)
+    except Exception as e:
+        log(f"Error unmounting Cryptomator FUSE: {e}")
+
+    # 3. Terminate Cryptomator app to wipe encryption keys from RAM
+    try:
+        res = subprocess.run(["pgrep", "-fi", "cryptomator"], capture_output=True, check=False)
+        if res.returncode == 0:
+            log("Terminating Cryptomator app to purge volatile encryption keys from RAM...")
+            subprocess.run(["flatpak", "kill", "org.cryptomator.Cryptomator"], check=False)
+            subprocess.run(["pkill", "-TERM", "-f", "cryptomator"], check=False)
+            log("Cryptomator terminated.")
+    except Exception as e:
+        log(f"Error terminating Cryptomator: {e}")
+
+    log("Financial vaults are 100% locked.")
+
+def on_sleep_signal(sleeping):
+    if sleeping:
+        lock_financial_vaults()
+    else:
+        log("System resumed from sleep. Financial vaults remain locked until password is entered.")
+
+def main():
+    log("finance-sleep-lock daemon started. Monitoring system sleep events via DBus...")
+    DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+        bus.add_signal_receiver(
+            on_sleep_signal,
+            signal_name="PrepareForSleep",
+            dbus_interface="org.freedesktop.login1.Manager",
+            bus_name="org.freedesktop.login1"
+        )
+    except Exception as e:
+        log(f"Failed to connect to SystemBus: {e}")
+        sys.exit(1)
+
+    loop = GLib.MainLoop()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        log("finance-sleep-lock daemon exiting.")
+
+if __name__ == "__main__":
+    main()

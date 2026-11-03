@@ -14,6 +14,7 @@ usage() {
     echo "  diff                  Show unstaged changes in the myLinux repository"
     echo "  autostart [DE]        Manage autostart packages (cosmic | gnome | plasma | detect | status)"
     echo "  daemon [action]       Manage rclone daily backup daemon (status | enable | disable | run | logs)"
+    echo "  finance [action]      Manage financial vaults and backups (status | backup | lock | logs)"
     echo "  cd                    Print path to myLinux repository (eval \"cd \$(dotfiles cd)\")"
     echo "  help                  Show this help message"
 }
@@ -127,6 +128,54 @@ case "$1" in
                 ;;
             *)
                 echo "Usage: dotfiles daemon [status|enable|disable|run|logs]"
+                exit 1
+                ;;
+        esac
+        ;;
+    finance)
+        case "${2:-status}" in
+            status)
+                echo "=== GnuCash & Cloud Vault Status ==="
+                gnucash-refresh --status
+                echo ""
+                echo "=== Sleep Auto-Lock Daemon Status ==="
+                systemctl --user status finance-sleep-lock.service --no-pager || true
+                ;;
+            backup)
+                echo "Triggering VeraCrypt USB finance backup..."
+                finance-usb-backup "${@:3}"
+                ;;
+            lock)
+                echo "Manually locking financial vaults..."
+                vault_mount="$HOME/.local/share/Cryptomator/mnt/FinanceVault"
+                if mountpoint -q "$vault_mount" 2>/dev/null; then
+                    fusermount3 -u "$vault_mount" 2>/dev/null || true
+                    echo "Unmounted $vault_mount"
+                fi
+                if pgrep -fi "cryptomator" >/dev/null 2>&1; then
+                    flatpak kill org.cryptomator.Cryptomator 2>/dev/null || pkill -TERM -f cryptomator 2>/dev/null || true
+                    echo "Terminated Cryptomator application."
+                fi
+                if mountpoint -q "/media/veracrypt1" 2>/dev/null; then
+                    sync -f /media/veracrypt1 2>/dev/null || sync
+                    veracrypt -d /media/veracrypt1 2>/dev/null || true
+                    echo "Dismounted VeraCrypt USB volume."
+                fi
+                echo "All financial vaults are locked."
+                ;;
+            logs)
+                echo "=== Sleep Auto-Lock Logs (~/.local/state/security/sleep-lock.log) ==="
+                if [ -f "$HOME/.local/state/security/sleep-lock.log" ]; then
+                    tail -n 25 "$HOME/.local/state/security/sleep-lock.log"
+                fi
+                echo ""
+                echo "=== USB Backup Logs (~/.local/state/rclone/usb-backup.log) ==="
+                if [ -f "$HOME/.local/state/rclone/usb-backup.log" ]; then
+                    tail -n 25 "$HOME/.local/state/rclone/usb-backup.log"
+                fi
+                ;;
+            *)
+                echo "Usage: dotfiles finance [status|backup|lock|logs]"
                 exit 1
                 ;;
         esac

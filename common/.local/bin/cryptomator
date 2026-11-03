@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# cryptomator - Universal launcher across native package and Flatpak installations
+# Managed by GNU Stow via myLinux
+
+if [ -x /usr/bin/cryptomator ]; then
+    exec /usr/bin/cryptomator "$@"
+elif flatpak info org.cryptomator.Cryptomator >/dev/null 2>&1; then
+    exec flatpak run org.cryptomator.Cryptomator "$@"
+else
+    echo "Error: Cryptomator is not installed (checked native package and flatpak)." >&2
+    exit 1
+fi

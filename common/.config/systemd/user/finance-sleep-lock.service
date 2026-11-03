@@ -1,0 +1,13 @@
+[Unit]
+Description=Finance Vault Auto-Lock on Sleep Daemon
+Documentation=https://github.com/davegutz/myLinux
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/finance-sleep-lock
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

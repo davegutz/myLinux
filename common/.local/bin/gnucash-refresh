@@ -318,16 +318,76 @@ ensure_mount() {
     return 0
 }
 
+# 4b. Ensure Cryptomator Vault is unlocked
+ensure_vault() {
+    local target_vault="${VAULT_MOUNT:-$HOME/.local/share/Cryptomator/mnt/FinanceVault}"
+    local storage_dir="${VAULT_STORAGE:-$GDRIVE_MOUNT/FinanceVault}"
+
+    # If vault directory is accessible and contains our target folder, all good
+    if [ -d "$target_vault/$REMOTE_FOLDER" ]; then
+        return 0
+    fi
+
+    # If showing status only, do not block or launch Cryptomator
+    if [ "$SHOW_STATUS" = true ]; then
+        return 0
+    fi
+
+    # If the encrypted vault exists on Google Drive, but the decrypted mount is not open
+    if [ -d "$storage_dir" ]; then
+        echo "[WARNING] Cryptomator FinanceVault is locked."
+        notify "normal" "Cryptomator Vault Locked" "Please unlock FinanceVault to synchronize GnuCash."
+
+        # Launch Cryptomator if not already running
+        if ! pgrep -fi "cryptomator" >/dev/null 2>&1; then
+            if command -v cryptomator >/dev/null 2>&1; then
+                cryptomator &
+            elif flatpak info org.cryptomator.Cryptomator >/dev/null 2>&1; then
+                flatpak run org.cryptomator.Cryptomator &
+            fi
+        fi
+
+        echo "Waiting for Cryptomator vault to be unlocked (up to 30s)..."
+        for _ in {1..30}; do
+            if [ -d "$target_vault/$REMOTE_FOLDER" ]; then
+                echo "Vault unlocked successfully."
+                return 0
+            fi
+            sleep 1
+        done
+
+        echo "[ERROR] Cryptomator FinanceVault remained locked. Synchronization aborted."
+        notify "critical" "Vault Locked" "Cryptomator FinanceVault remained locked. Synchronization aborted."
+        return 1
+    fi
+
+    # If no vault storage on Google Drive either, proceed to find_remote_dir fallback
+    return 0
+}
+
 # 5. Verify Dedicated Remote Source Directory
 find_remote_dir() {
-    local target_remote_dir="$GDRIVE_MOUNT/$REMOTE_BASE_PATH/$REMOTE_FOLDER"
+    # 1. Prefer unlocked Cryptomator vault
+    local target_vault="${VAULT_MOUNT:-$HOME/.local/share/Cryptomator/mnt/FinanceVault}"
+    if [ -d "$target_vault/$REMOTE_FOLDER" ]; then
+        echo "$target_vault/$REMOTE_FOLDER"
+        return 0
+    fi
 
+    # If encrypted vault storage exists on Google Drive, do not fall back to unencrypted legacy folder
+    local storage_dir="${VAULT_STORAGE:-$GDRIVE_MOUNT/FinanceVault}"
+    if [ -d "$storage_dir" ]; then
+        return 1
+    fi
+
+    # 2. Fall back to legacy unencrypted Google Drive path if vault not yet used
+    local target_remote_dir="$GDRIVE_MOUNT/${REMOTE_BASE_PATH:-Finance remote}/$REMOTE_FOLDER"
     if [ -d "$target_remote_dir" ]; then
         echo "$target_remote_dir"
         return 0
     fi
 
-    echo "[ERROR] Dedicated remote folder does not exist: $target_remote_dir" >&2
+    echo "[ERROR] Dedicated remote folder does not exist: ${target_vault}/$REMOTE_FOLDER" >&2
     return 1
 }
 
@@ -378,7 +438,11 @@ check_cloud_lock() {
 
     # Refresh VFS cache for this remote directory if rclone RC is available
     if [ -d "$REMOTE_DIR" ] && command -v rclone >/dev/null 2>&1; then
-        rclone rc vfs/refresh dir="$REMOTE_BASE_PATH/$REMOTE_FOLDER" >/dev/null 2>&1 || true
+        if [ -d "${VAULT_STORAGE:-$GDRIVE_MOUNT/FinanceVault}" ]; then
+            rclone rc vfs/refresh dir="FinanceVault" >/dev/null 2>&1 || true
+        else
+            rclone rc vfs/refresh dir="$REMOTE_BASE_PATH/$REMOTE_FOLDER" >/dev/null 2>&1 || true
+        fi
     fi
 
     local lock_path="$REMOTE_DIR/.session_lock"
@@ -505,9 +569,24 @@ if ! ensure_mount; then
     exit 1
 fi
 
+if ! ensure_vault; then
+    hold_terminal_on_error
+    exit 1
+fi
+
 REMOTE_DIR=$(find_remote_dir) || {
-    echo "[ERROR] Dedicated remote folder not found: $GDRIVE_MOUNT/$REMOTE_BASE_PATH/$REMOTE_FOLDER"
-    notify "critical" "GnuCash Refresh Failed" "Dedicated remote folder not found: $REMOTE_BASE_PATH/$REMOTE_FOLDER"
+    if [ "$SHOW_STATUS" = true ]; then
+        echo "=========================================================="
+        echo " GnuCash Joint Auto-Refresh Launcher"
+        echo " Remote Vault  : ${VAULT_MOUNT:-$HOME/.local/share/Cryptomator/mnt/FinanceVault} [LOCKED]"
+        echo " Local Target  : $LOCAL_DIR"
+        echo "=========================================================="
+        echo "  [LOCKED] Cryptomator FinanceVault is currently locked."
+        echo "  Unlock FinanceVault in Cryptomator to synchronize or view status."
+        exit 0
+    fi
+    echo "[ERROR] Dedicated remote folder not found: ${VAULT_MOUNT:-$GDRIVE_MOUNT/$REMOTE_BASE_PATH}/$REMOTE_FOLDER"
+    notify "critical" "GnuCash Refresh Failed" "Dedicated remote folder not found: $REMOTE_FOLDER"
     hold_terminal_on_error
     exit 1
 }
@@ -538,7 +617,11 @@ show_status() {
     echo "=========================================================="
     echo "--- Cloud Lock Status ---"
     if [ -d "$REMOTE_DIR" ] && command -v rclone >/dev/null 2>&1; then
-        rclone rc vfs/refresh dir="$REMOTE_BASE_PATH/$REMOTE_FOLDER" >/dev/null 2>&1 || true
+        if [ -d "${VAULT_STORAGE:-$GDRIVE_MOUNT/FinanceVault}" ]; then
+            rclone rc vfs/refresh dir="FinanceVault" >/dev/null 2>&1 || true
+        else
+            rclone rc vfs/refresh dir="$REMOTE_BASE_PATH/$REMOTE_FOLDER" >/dev/null 2>&1 || true
+        fi
     fi
     if [ -s "$REMOTE_DIR/.session_lock" ] && grep -q "machine=" "$REMOTE_DIR/.session_lock" 2>/dev/null; then
         echo "  [LOCKED] Active session lock on Google Drive:"

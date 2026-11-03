@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# finance-usb-backup - Periodic financial backup engine to VeraCrypt USB drive
+# Managed by GNU Stow via myLinux
+set -euo pipefail
+
+# 1. Load configuration
+CONF_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/rclone/usb-backup.conf"
+CONF_LOCAL="${XDG_CONFIG_HOME:-$HOME/.config}/rclone/usb-backup.conf.local"
+
+if [ -f "$CONF_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$CONF_FILE"
+fi
+
+if [ -f "$CONF_LOCAL" ]; then
+    # shellcheck source=/dev/null
+    source "$CONF_LOCAL"
+fi
+
+# Defaults if not defined
+USB_MOUNT="${USB_MOUNT:-/media/veracrypt1}"
+CANARY_FILE="${CANARY_FILE:-$USB_MOUNT/.veracrypt_finance_canary}"
+DEST_DIR="${DEST_DIR:-$USB_MOUNT/FinanceBackup}"
+ARCHIVE_BASE="${ARCHIVE_BASE:-$USB_MOUNT/Archive}"
+BACKUP_SOURCES=("${BACKUP_SOURCES[@]:-$HOME/Documents/Gutz_joint_gnucash}")
+RCLONE_FLAGS=("${RCLONE_FLAGS[@]:---checksum --transfers 4 --checkers 8 --exclude "*.LCK" --exclude "*.tmp" --exclude "*~" --stats 5s --fast-list}")
+ENABLE_ARCHIVE="${ENABLE_ARCHIVE:-true}"
+NOTIFY_ON_COMPLETION="${NOTIFY_ON_COMPLETION:-true}"
+
+# CLI flags
+DRY_RUN=false
+AUTO_DISMOUNT=false
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Safely synchronizes financial records to a mounted VeraCrypt USB drive using rclone copy.
+
+Options:
+  -n, --dry-run     Simulate the backup without writing any files
+  -d, --dismount    Dismount VeraCrypt volume after successful backup
+  -h, --help        Show this help message
+
+Configuration:
+  $CONF_FILE
+  $CONF_LOCAL (optional machine-specific override)
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -d|--dismount)
+            AUTO_DISMOUNT=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# 2. Logging and Lock Setup
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/rclone"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/usb-backup.log"
+LOCK_FILE="/tmp/finance-usb-backup-$USER.lock"
+
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another finance USB backup is already running. Exiting."
+    exit 0
+fi
+
+echo "==========================================================" | tee -a "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting financial backup to VeraCrypt USB..." | tee -a "$LOG_FILE"
+
+# 3. Verify VeraCrypt Mount & Canary Marker
+if [ ! -f "$CANARY_FILE" ]; then
+    MSG="VeraCrypt USB volume is not mounted (canary file missing: $CANARY_FILE). Aborting."
+    echo "[ERROR] $MSG" | tee -a "$LOG_FILE"
+    if [ "$NOTIFY_ON_COMPLETION" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -u critical -i dialog-warning "Finance USB Backup Failed" "$MSG" 2>/dev/null || true
+    fi
+    exit 1
+fi
+
+if ! command -v rclone >/dev/null 2>&1; then
+    echo "[ERROR] rclone is not installed or not in PATH." | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+TIMESTAMP="$(date '+%Y-%m-%d_%H%M%S')"
+FAILED=0
+COPIED_COUNT=0
+
+# 4. Execute copy for each configured source directory
+for src in "${BACKUP_SOURCES[@]}"; do
+    if [ ! -d "$src" ]; then
+        echo "[WARNING] Source directory does not exist: $src (skipping)" | tee -a "$LOG_FILE"
+        continue
+    fi
+
+    folder_name="$(basename "$src")"
+    dest_path="${DEST_DIR%/}/${folder_name}"
+    archive_path="${ARCHIVE_BASE%/}/${TIMESTAMP}/${folder_name}"
+
+    CMD_ARGS=("${RCLONE_FLAGS[@]}")
+    if [ "$ENABLE_ARCHIVE" = true ]; then
+        CMD_ARGS+=(--backup-dir "$archive_path")
+    fi
+    if [ "$DRY_RUN" = true ]; then
+        CMD_ARGS+=(--dry-run)
+    fi
+
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Copying $folder_name -> $dest_path ..." | tee -a "$LOG_FILE"
+    if rclone copy "$src" "$dest_path" "${CMD_ARGS[@]}" --log-file="$LOG_FILE" --log-level NOTICE; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Successfully synced $folder_name." | tee -a "$LOG_FILE"
+        COPIED_COUNT=$((COPIED_COUNT + 1))
+    else
+        echo "[ERROR] Failed to copy $folder_name." | tee -a "$LOG_FILE"
+        FAILED=1
+    fi
+done
+
+# 5. Flush filesystem cache to flash NAND
+if [ "$DRY_RUN" != true ] && [ $FAILED -eq 0 ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Flushing write buffers to USB flash memory (sync)..." | tee -a "$LOG_FILE"
+    sync
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Flush complete." | tee -a "$LOG_FILE"
+fi
+
+# 6. Optional auto-dismount
+if [ "$AUTO_DISMOUNT" = true ] && [ $FAILED -eq 0 ] && [ "$DRY_RUN" != true ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Dismounting VeraCrypt volume ($USB_MOUNT)..." | tee -a "$LOG_FILE"
+    if command -v veracrypt >/dev/null 2>&1; then
+        veracrypt -d "$USB_MOUNT" 2>/dev/null || true
+    fi
+fi
+
+# 7. Status and Notification
+END_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
+if [ $FAILED -eq 0 ]; then
+    if [ "$DRY_RUN" = true ]; then
+        MSG="Finance USB backup simulation completed successfully."
+    else
+        MSG="Finance USB backup completed successfully ($COPIED_COUNT sources verified)."
+    fi
+    echo "[$END_TIME] $MSG" | tee -a "$LOG_FILE"
+    if [ "$NOTIFY_ON_COMPLETION" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -i document-save "Finance USB Backup" "$MSG" 2>/dev/null || true
+    fi
+else
+    MSG="Finance USB backup encountered errors. Check $LOG_FILE"
+    echo "[$END_TIME] $MSG" | tee -a "$LOG_FILE"
+    if [ "$NOTIFY_ON_COMPLETION" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -u critical -i dialog-warning "Finance USB Backup Failed" "$MSG" 2>/dev/null || true
+    fi
+    exit 1
+fi
