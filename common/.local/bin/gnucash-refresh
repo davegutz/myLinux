@@ -437,23 +437,6 @@ tighten_local_permissions() {
     fi
 }
 
-# VeraCrypt USB Warning Dialog (Non-blocking)
-warn_stick_missing() {
-    local title="GnuCash USB Backup Notice"
-    local msg="VeraCrypt USB backup drive is not connected or unlocked at $USB_MOUNT.\n\nPlease insert and unlock your VeraCrypt USB stick so a dated backup can be created next time you open GnuCash."
-
-    echo -e "[WARNING] $msg"
-    notify "normal" "$title" "VeraCrypt USB drive not detected at $USB_MOUNT. Suggest inserting and unlocking it for next open of GnuCash."
-
-    if [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
-        if command -v kdialog >/dev/null 2>&1; then
-            kdialog --title "$title" --msgbox "$msg" 2>/dev/null &
-        elif command -v zenity >/dev/null 2>&1; then
-            zenity --warning --title="$title" --text="$msg" 2>/dev/null &
-        fi
-    fi
-}
-
 # Dated Backup in Cryptomator Vault
 backup_dated_vault() {
     local src_file="$1"
@@ -525,14 +508,72 @@ backup_dated_usb() {
     fi
 }
 
-# Check and execute VeraCrypt USB Backup (or throw non-blocking warning)
+# Check and execute VeraCrypt USB Backup (prompt user if missing)
 check_and_backup_usb() {
     local src_file="$1"
+
+    # 1. If already mounted, backup immediately and proceed
     if mountpoint -q "$USB_MOUNT" 2>/dev/null; then
         echo "  [USB Backup] VeraCrypt USB drive detected at $USB_MOUNT."
         backup_dated_usb "$src_file"
-    else
-        warn_stick_missing
+        return 0
+    fi
+
+    local title="GnuCash USB Backup Notice"
+    local prompt_msg="VeraCrypt USB backup drive is not connected or unlocked at $USB_MOUNT.\n\nWould you like to insert and unlock your VeraCrypt stick now, or continue opening GnuCash without a USB backup?"
+
+    echo -e "\n[WARNING] VeraCrypt USB backup drive is not connected or unlocked at $USB_MOUNT."
+    notify "normal" "$title" "VeraCrypt USB drive not detected at $USB_MOUNT. Suggest inserting and unlocking it for next open of GnuCash."
+
+    # GUI Dialog (KDE / Qt kdialog)
+    if [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ] && command -v kdialog >/dev/null 2>&1; then
+        if kdialog --title "$title" \
+            --yes-label "Retry Backup" \
+            --no-label "Continue to GnuCash" \
+            --warningyesno "$prompt_msg" 2>/dev/null; then
+            # User clicked "Retry Backup"
+            if mountpoint -q "$USB_MOUNT" 2>/dev/null; then
+                echo "  [USB Backup] VeraCrypt stick detected on retry."
+                backup_dated_usb "$src_file"
+            else
+                echo "  [NOTICE] VeraCrypt stick still not detected. Opening GnuCash..."
+                notify "normal" "$title" "VeraCrypt stick not detected. Opening GnuCash without USB backup."
+            fi
+        else
+            echo "  [NOTICE] Continuing without VeraCrypt USB backup."
+        fi
+        return 0
+    fi
+
+    # GUI Dialog Fallback (Zenity / GTK)
+    if [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ] && command -v zenity >/dev/null 2>&1; then
+        if zenity --question --title="$title" \
+            --ok-label="Retry Backup" \
+            --cancel-label="Continue to GnuCash" \
+            --text="$prompt_msg" --timeout=15 2>/dev/null; then
+            if mountpoint -q "$USB_MOUNT" 2>/dev/null; then
+                echo "  [USB Backup] VeraCrypt stick detected on retry."
+                backup_dated_usb "$src_file"
+            else
+                echo "  [NOTICE] VeraCrypt stick still not detected. Opening GnuCash..."
+            fi
+        else
+            echo "  [NOTICE] Continuing without VeraCrypt USB backup."
+        fi
+        return 0
+    fi
+
+    # Terminal prompt fallback (when run in pure CLI)
+    if [ -t 0 ]; then
+        local resp=""
+        read -r -t 10 -p "Insert VeraCrypt USB stick and press 'y' to retry, or press Enter to continue (auto-continuing in 10s): " resp || true
+        if [[ "$resp" =~ ^[Yy]$ ]]; then
+            if mountpoint -q "$USB_MOUNT" 2>/dev/null; then
+                backup_dated_usb "$src_file"
+            else
+                echo "  [NOTICE] VeraCrypt stick still not detected. Opening GnuCash..."
+            fi
+        fi
     fi
 }
 
