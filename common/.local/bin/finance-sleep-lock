@@ -68,6 +68,17 @@ def lock_financial_vaults():
     except Exception as e:
         log(f"Error terminating Cryptomator: {e}")
 
+    # 4. Clean up any residual GTK sidebar bookmarks
+    try:
+        bm_path = os.path.expanduser("~/.config/gtk-3.0/bookmarks")
+        if os.path.isfile(bm_path):
+            with open(bm_path, "r") as f:
+                lines = [l for l in f if "FinanceVault" not in l]
+            with open(bm_path, "w") as f:
+                f.writelines(lines)
+    except Exception:
+        pass
+
     log("Financial vaults are 100% locked.")
 
 def on_sleep_signal(sleeping):

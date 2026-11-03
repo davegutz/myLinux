@@ -157,6 +157,7 @@ case "$1" in
                     flatpak kill org.cryptomator.Cryptomator 2>/dev/null || pkill -TERM -f cryptomator 2>/dev/null || true
                     echo "Terminated Cryptomator application."
                 fi
+                sed -i '/FinanceVault/d' "$HOME/.config/gtk-3.0/bookmarks" 2>/dev/null || true
                 if mountpoint -q "/media/veracrypt1" 2>/dev/null; then
                     sync -f /media/veracrypt1 2>/dev/null || sync
                     veracrypt -d /media/veracrypt1 2>/dev/null || true
