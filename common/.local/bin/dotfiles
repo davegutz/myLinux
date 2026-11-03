@@ -148,8 +148,9 @@ case "$1" in
             lock)
                 echo "Manually locking financial vaults..."
                 vault_mount="$HOME/.local/share/Cryptomator/mnt/FinanceVault"
-                if mountpoint -q "$vault_mount" 2>/dev/null; then
-                    fusermount3 -u "$vault_mount" 2>/dev/null || true
+                if mountpoint -q "$vault_mount" 2>/dev/null || grep -q "$vault_mount" /proc/mounts 2>/dev/null; then
+                    fusermount -u -z "$vault_mount" 2>/dev/null || fusermount3 -u -z "$vault_mount" 2>/dev/null || true
+                    rmdir "$vault_mount" 2>/dev/null || true
                     echo "Unmounted $vault_mount"
                 fi
                 if pgrep -fi "cryptomator" >/dev/null 2>&1; then

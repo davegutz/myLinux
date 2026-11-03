@@ -188,7 +188,7 @@ ask_user_override() {
 hold_terminal_on_error() {
     if [ -t 1 ] && [ "${HOLD_ON_ERROR:-true}" = true ]; then
         echo ""
-        read -r -t 10 -p "Press Enter to close window (auto-closing in 10s)..." || true
+        read -r -p "Press Enter to close this window..." || true
     fi
 }
 
@@ -323,6 +323,17 @@ ensure_vault() {
     local target_vault="${VAULT_MOUNT:-$HOME/.local/share/Cryptomator/mnt/FinanceVault}"
     local storage_dir="${VAULT_STORAGE:-$GDRIVE_MOUNT/FinanceVault}"
 
+    # Proactively clean up stale/broken FUSE mount if endpoint was left disconnected
+    if grep -q "$target_vault" /proc/mounts 2>/dev/null || [ -e "$target_vault" ] || [ -d "$target_vault" ]; then
+        if ! stat -t "$target_vault" >/dev/null 2>&1; then
+            echo "[WARNING] Detected stale Cryptomator mount at $target_vault. Cleaning up..."
+            fusermount -u -z "$target_vault" 2>/dev/null || fusermount3 -u -z "$target_vault" 2>/dev/null || true
+            rmdir "$target_vault" 2>/dev/null || true
+        elif [ -d "$target_vault" ] && ! pgrep -fi "cryptomator" >/dev/null 2>&1; then
+            rmdir "$target_vault" 2>/dev/null || true
+        fi
+    fi
+
     # If vault directory is accessible and contains our target folder, all good
     if [ -d "$target_vault/$REMOTE_FOLDER" ]; then
         return 0
@@ -358,6 +369,11 @@ ensure_vault() {
 
         echo "[ERROR] Cryptomator FinanceVault remained locked. Synchronization aborted."
         notify "critical" "Vault Locked" "Cryptomator FinanceVault remained locked. Synchronization aborted."
+        if command -v kdialog >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+            kdialog --title "Cryptomator Vault Locked" --sorry "Cryptomator FinanceVault is locked.\n\nSynchronization was aborted. Please unlock FinanceVault in Cryptomator before running GnuCash." 2>/dev/null || true
+        elif command -v zenity >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+            zenity --warning --title="Cryptomator Vault Locked" --text="Cryptomator FinanceVault is locked.\n\nSynchronization was aborted. Please unlock FinanceVault in Cryptomator before running GnuCash." 2>/dev/null || true
+        fi
         return 1
     fi
 
