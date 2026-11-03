@@ -44,6 +44,7 @@ TERMINAL_MONITOR="${TERMINAL_MONITOR:-true}"
 HOLD_TERMINAL="${HOLD_TERMINAL:-true}"
 HOLD_SECONDS="${HOLD_SECONDS:-3}"
 HOLD_ON_ERROR="${HOLD_ON_ERROR:-true}"
+VAULT_UNLOCK_TIMEOUT="${VAULT_UNLOCK_TIMEOUT:-120}"
 
 # CLI flags
 REFRESH_ONLY=false
@@ -258,7 +259,7 @@ if [ -t 1 ]; then
 fi
 
 # 2. Local single-instance lock setup
-LOCK_FILE="/tmp/gnucash-refresh-$USER.lock"
+LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/gnucash-refresh.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another gnucash-refresh process is already active."
@@ -266,6 +267,12 @@ if ! flock -n 200; then
     hold_terminal_on_error
     exit 0
 fi
+
+release_local_lock() {
+    flock -u 200 2>/dev/null || true
+    exec 200>&- 2>/dev/null || true
+}
+trap release_local_lock EXIT INT TERM HUP
 
 # 3. Check if GnuCash currently has the book open locally
 check_gnucash_active() {
@@ -349,22 +356,33 @@ ensure_vault() {
         echo "[WARNING] Cryptomator FinanceVault is locked."
         notify "normal" "Cryptomator Vault Locked" "Please unlock FinanceVault to synchronize GnuCash."
 
-        # Launch Cryptomator if not already running
+        # Launch Cryptomator if not already running (redirect output and close fd 200)
         if ! pgrep -fi "cryptomator" >/dev/null 2>&1; then
             if command -v cryptomator >/dev/null 2>&1; then
-                cryptomator &
+                env -u LD_PRELOAD cryptomator 200>&- >/dev/null 2>&1 &
             elif flatpak info org.cryptomator.Cryptomator >/dev/null 2>&1; then
-                flatpak run org.cryptomator.Cryptomator &
+                env -u LD_PRELOAD flatpak run org.cryptomator.Cryptomator 200>&- >/dev/null 2>&1 &
             fi
         fi
 
-        echo "Waiting for Cryptomator vault to be unlocked (up to 30s)..."
-        for _ in {1..30}; do
+        local timeout="${VAULT_UNLOCK_TIMEOUT:-120}"
+        echo "Waiting for Cryptomator vault to be unlocked (up to ${timeout}s)..."
+        local elapsed=0
+        while [ "$elapsed" -lt "$timeout" ]; do
             if [ -d "$target_vault/$REMOTE_FOLDER" ]; then
                 echo "Vault unlocked successfully."
                 return 0
             fi
             sleep 1
+            elapsed=$((elapsed + 1))
+            if [ $((elapsed % 15)) -eq 0 ] && [ "$elapsed" -lt "$timeout" ]; then
+                echo "  Still waiting for vault unlock (${elapsed}s/${timeout}s)..."
+            fi
+            # If Cryptomator was closed by the user without unlocking, abort early
+            if ! pgrep -fi "cryptomator" >/dev/null 2>&1; then
+                echo "[NOTICE] Cryptomator was closed before the vault was unlocked."
+                break
+            fi
         done
 
         echo "[ERROR] Cryptomator FinanceVault remained locked. Synchronization aborted."
@@ -575,7 +593,7 @@ release_cloud_lock() {
 # Handle Open Folder
 if [ "$OPEN_FOLDER" = true ]; then
     mkdir -p "$LOCAL_DIR"
-    xdg-open "$LOCAL_DIR" >/dev/null 2>&1 &
+    xdg-open "$LOCAL_DIR" 200>&- >/dev/null 2>&1 &
     exit 0
 fi
 
@@ -846,7 +864,7 @@ if [ "$OPEN_ODS" = true ]; then
         echo "Opening budget spreadsheets in LibreOffice Calc..."
         for ods in "${SPREADSHEET_FILES[@]}"; do
             if [ -f "$LOCAL_DIR/$ods" ]; then
-                libreoffice "$LOCAL_DIR/$ods" >/dev/null 2>&1 &
+                libreoffice "$LOCAL_DIR/$ods" 200>&- >/dev/null 2>&1 &
             fi
         done
     fi
@@ -918,6 +936,7 @@ cleanup_session() {
     fi
 
     release_cloud_lock
+    release_local_lock
     notify "low" "GnuCash Joint Closed" "All changes saved and synchronized to Google Drive."
 }
 
@@ -928,7 +947,7 @@ trap cleanup_session EXIT INT TERM HUP
 acquire_cloud_lock
 
 echo "Launching GnuCash on $TARGET_GNUCASH..."
-gnucash "$TARGET_GNUCASH" &
+gnucash "$TARGET_GNUCASH" 200>&- &
 GNUCASH_PID=$!
 
 # Record initial mtimes for file watcher
