@@ -30,6 +30,10 @@ GDRIVE_MOUNT="${GDRIVE_MOUNT:-$HOME/gdrive}"
 REMOTE_BASE_PATH="${REMOTE_BASE_PATH:-Finance remote}"
 REMOTE_FOLDER="${REMOTE_FOLDER:-Gutz_joint_gnucash}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
+DIRECT_VAULT_MODE="${DIRECT_VAULT_MODE:-true}"
+USB_MOUNT="${USB_MOUNT:-/media/veracrypt1}"
+USB_BACKUP_DIR="${USB_BACKUP_DIR:-$USB_MOUNT/FinanceBackup}"
+MAX_DATED_BACKUPS="${MAX_DATED_BACKUPS:-15}"
 CREATE_BACKUP="${CREATE_BACKUP:-true}"
 BACKUP_DIR="${BACKUP_DIR:-$LOCAL_DIR/.backups}"
 MAX_BACKUPS="${MAX_BACKUPS:-10}"
@@ -425,6 +429,113 @@ find_remote_dir() {
     return 1
 }
 
+# Security & Permissions Helper (Option 3)
+tighten_local_permissions() {
+    if [ -d "$LOCAL_DIR" ]; then
+        chmod 700 "$LOCAL_DIR" 2>/dev/null || true
+        find "$LOCAL_DIR" -type f -exec chmod 600 {} + 2>/dev/null || true
+    fi
+}
+
+# VeraCrypt USB Warning Dialog (Non-blocking)
+warn_stick_missing() {
+    local title="GnuCash USB Backup Notice"
+    local msg="VeraCrypt USB backup drive is not connected or unlocked at $USB_MOUNT.\n\nPlease insert and unlock your VeraCrypt USB stick so a dated backup can be created next time you open GnuCash."
+
+    echo -e "[WARNING] $msg"
+    notify "normal" "$title" "VeraCrypt USB drive not detected at $USB_MOUNT. Suggest inserting and unlocking it for next open of GnuCash."
+
+    if [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+        if command -v kdialog >/dev/null 2>&1; then
+            kdialog --title "$title" --msgbox "$msg" 2>/dev/null &
+        elif command -v zenity >/dev/null 2>&1; then
+            zenity --warning --title="$title" --text="$msg" 2>/dev/null &
+        fi
+    fi
+}
+
+# Dated Backup in Cryptomator Vault
+backup_dated_vault() {
+    local src_file="$1"
+    local target_vault_dir="$2"
+    local vault_backups="$target_vault_dir/.backups"
+
+    if [ ! -f "$src_file" ]; then
+        return 0
+    fi
+
+    mkdir -p "$vault_backups" 2>/dev/null || return 0
+
+    local fname
+    fname="$(basename "$src_file")"
+    local ts
+    ts="$(date '+%Y%m%d_%H%M%S')"
+    local dated_file="$vault_backups/${fname}.${ts}.gnucash"
+
+    if cp -p "$src_file" "$dated_file" 2>/dev/null; then
+        echo "  [Vault Backup] Saved dated copy in vault: $(basename "$dated_file")"
+    fi
+
+    # Prune old dated backups in vault (keeping MAX_DATED_BACKUPS)
+    local max_b="${MAX_DATED_BACKUPS:-15}"
+    if [ "$max_b" -gt 0 ]; then
+        local count
+        count=$(find "$vault_backups" -maxdepth 1 -name "${fname}.*.gnucash" 2>/dev/null | wc -l)
+        if [ "$count" -gt "$max_b" ]; then
+            find "$vault_backups" -maxdepth 1 -name "${fname}.*.gnucash" -printf "%T@ %p\n" 2>/dev/null | \
+                sort -n | head -n "$((count - max_b))" | cut -d' ' -f2- | xargs -r rm -f
+        fi
+    fi
+}
+
+# Dated Backup on VeraCrypt USB Stick
+backup_dated_usb() {
+    local src_file="$1"
+    local usb_dest="${USB_BACKUP_DIR:-$USB_MOUNT/FinanceBackup}"
+    local usb_backups="$usb_dest/backups"
+
+    if [ ! -f "$src_file" ]; then
+        return 0
+    fi
+
+    mkdir -p "$usb_backups" 2>/dev/null || return 0
+
+    local fname
+    fname="$(basename "$src_file")"
+    local ts
+    ts="$(date '+%Y%m%d_%H%M%S')"
+    local dated_file="$usb_backups/${fname}.${ts}.gnucash"
+
+    if cp -p "$src_file" "$dated_file" 2>/dev/null; then
+        cp -p "$src_file" "$usb_dest/$fname" 2>/dev/null || true
+        sync -f "$usb_dest" 2>/dev/null || sync 2>/dev/null || true
+        echo "  [USB Backup] Saved dated copy to VeraCrypt stick: $(basename "$dated_file")"
+        notify "low" "USB Backup Saved" "Dated copy saved to VeraCrypt stick:\n$(basename "$dated_file")"
+    fi
+
+    # Prune old dated backups on USB (keeping MAX_DATED_BACKUPS)
+    local max_b="${MAX_DATED_BACKUPS:-15}"
+    if [ "$max_b" -gt 0 ]; then
+        local count
+        count=$(find "$usb_backups" -maxdepth 1 -name "${fname}.*.gnucash" 2>/dev/null | wc -l)
+        if [ "$count" -gt "$max_b" ]; then
+            find "$usb_backups" -maxdepth 1 -name "${fname}.*.gnucash" -printf "%T@ %p\n" 2>/dev/null | \
+                sort -n | head -n "$((count - max_b))" | cut -d' ' -f2- | xargs -r rm -f
+        fi
+    fi
+}
+
+# Check and execute VeraCrypt USB Backup (or throw non-blocking warning)
+check_and_backup_usb() {
+    local src_file="$1"
+    if mountpoint -q "$USB_MOUNT" 2>/dev/null; then
+        echo "  [USB Backup] VeraCrypt USB drive detected at $USB_MOUNT."
+        backup_dated_usb "$src_file"
+    else
+        warn_stick_missing
+    fi
+}
+
 # 6. Safety Backup (Local)
 backup_file() {
     local src_file="$1"
@@ -592,6 +703,13 @@ release_cloud_lock() {
 
 # Handle Open Folder
 if [ "$OPEN_FOLDER" = true ]; then
+    if [ "${DIRECT_VAULT_MODE:-true}" = true ]; then
+        if ensure_mount && ensure_vault; then
+            VAULT_TARGET="$(find_remote_dir 2>/dev/null)" || VAULT_TARGET="$LOCAL_DIR"
+            xdg-open "$VAULT_TARGET" 200>&- >/dev/null 2>&1 &
+            exit 0
+        fi
+    fi
     mkdir -p "$LOCAL_DIR"
     xdg-open "$LOCAL_DIR" 200>&- >/dev/null 2>&1 &
     exit 0
@@ -645,9 +763,15 @@ ALL_TARGET_FILES=("$GNUCASH_FILE" "${SPREADSHEET_FILES[@]}")
 # Function: Show Status and Actionable Hints
 show_status() {
     echo "=========================================================="
-    echo " GnuCash Joint Auto-Refresh Launcher"
-    echo " Remote Source : $REMOTE_DIR"
-    echo " Local Target  : $LOCAL_DIR"
+    echo " GnuCash Joint Status & Security Monitor"
+    if [ "$DIRECT_VAULT_MODE" = true ]; then
+        echo " Security Mode : Direct Vault (Zero Local Plaintext)"
+        echo " Vault Target  : $REMOTE_DIR"
+    else
+        echo " Security Mode : Local Working Copy (Bidirectional Sync)"
+        echo " Remote Source : $REMOTE_DIR"
+        echo " Local Target  : $LOCAL_DIR"
+    fi
     echo "=========================================================="
     echo "--- Cloud Lock Status ---"
     if [ -d "$REMOTE_DIR" ] && command -v rclone >/dev/null 2>&1; then
@@ -668,6 +792,47 @@ show_status() {
             fi
         fi
         echo "  [UNLOCKED] No active session lock on Google Drive."
+    fi
+    echo ""
+    echo "--- VeraCrypt USB Backup Status ---"
+    if mountpoint -q "$USB_MOUNT" 2>/dev/null; then
+        echo "  [MOUNTED] VeraCrypt USB drive active at $USB_MOUNT."
+        local usb_count
+        usb_count=$(find "${USB_BACKUP_DIR:-$USB_MOUNT/FinanceBackup}/backups" -maxdepth 1 -name "*.gnucash" 2>/dev/null | wc -l)
+        echo "  Dated backups on USB stick: $usb_count"
+    else
+        echo "  [NOT DETECTED] VeraCrypt USB drive not mounted at $USB_MOUNT."
+        echo "  (Will display a non-blocking desktop reminder on launch)"
+    fi
+    echo ""
+    echo "--- Vault Backups Status ---"
+    local vault_count
+    vault_count=$(find "$REMOTE_DIR/.backups" -maxdepth 1 -name "*.gnucash" 2>/dev/null | wc -l)
+    echo "  Dated backups in FinanceVault: $vault_count"
+    echo ""
+    echo "--- Local Directory Permissions ---"
+    if [ -d "$LOCAL_DIR" ]; then
+        local l_perm
+        l_perm=$(stat -c "%a" "$LOCAL_DIR" 2>/dev/null || echo "unknown")
+        echo "  $LOCAL_DIR permissions: $l_perm (Secured: 700)"
+    fi
+    echo ""
+
+    if [ "$DIRECT_VAULT_MODE" = true ]; then
+        echo "--- Direct Vault Files ---"
+        for item in "${ALL_TARGET_FILES[@]}"; do
+            if [ -f "$REMOTE_DIR/$item" ]; then
+                echo "  [OK] $item: Present in FinanceVault"
+            else
+                echo "  [MISSING] $item: Missing in FinanceVault"
+            fi
+        done
+        echo ""
+        echo "--- Instructions & Next Steps ---"
+        echo "  * Direct Vault Mode is ACTIVE. All edits occur directly in FinanceVault."
+        echo "  * No plaintext copies are stored on your local SSD."
+        echo "  * Double-click the 'GnuCash (Joint)' desktop icon or run 'gnucash-refresh' to start."
+        return 0
     fi
     echo ""
     echo "--- File Sync Status ---"
@@ -779,6 +944,134 @@ if ! check_cloud_lock; then
     hold_terminal_on_error
     exit 1
 fi
+
+# Tighten permissions on local directory (Option 3)
+tighten_local_permissions
+
+if [ "$DIRECT_VAULT_MODE" = true ]; then
+    TARGET_DIR="$REMOTE_DIR"
+    TARGET_GNUCASH="$TARGET_DIR/$GNUCASH_FILE"
+
+    echo "=========================================================="
+    echo " GnuCash Joint Launcher (Direct Vault Mode)"
+    echo " Secure Vault Target : $TARGET_DIR"
+    echo " Zero Local Plaintext: Enabled"
+    echo "=========================================================="
+
+    # If target GnuCash file is missing in vault but present locally, initialize vault
+    if [ ! -f "$TARGET_GNUCASH" ]; then
+        if [ -f "$LOCAL_DIR/$GNUCASH_FILE" ]; then
+            echo "[Init] Initializing GnuCash book in FinanceVault from local master copy..."
+            cp -p "$LOCAL_DIR/$GNUCASH_FILE" "$TARGET_GNUCASH"
+        else
+            echo "[ERROR] GnuCash file not found in FinanceVault: $TARGET_GNUCASH"
+            notify "critical" "GnuCash Launch Error" "File not found: $TARGET_GNUCASH"
+            hold_terminal_on_error
+            exit 1
+        fi
+    fi
+
+    # 1. Create pre-launch dated backup in the secure vault
+    backup_dated_vault "$TARGET_GNUCASH" "$TARGET_DIR"
+
+    # 2. Check VeraCrypt USB stick and create dated backup (or warn without hanging)
+    check_and_backup_usb "$TARGET_GNUCASH"
+
+    # Open ODS spreadsheets if requested
+    if [ "$OPEN_ODS" = true ]; then
+        if command -v libreoffice >/dev/null 2>&1; then
+            echo "Opening budget spreadsheets in LibreOffice Calc from secure vault..."
+            for ods in "${SPREADSHEET_FILES[@]}"; do
+                if [ -f "$TARGET_DIR/$ods" ]; then
+                    libreoffice "$TARGET_DIR/$ods" 200>&- >/dev/null 2>&1 &
+                fi
+            done
+        fi
+    fi
+
+    # If refresh-only or dry-run, exit cleanly now
+    if [ "$REFRESH_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
+        echo "Direct Vault Mode active. Files verified and secured in FinanceVault."
+        exit 0
+    fi
+
+    CLEANUP_DONE=false
+    cleanup_session() {
+        set +e
+        if [ "$CLEANUP_DONE" = true ]; then
+            return 0
+        fi
+        CLEANUP_DONE=true
+
+        if [ -n "${GNUCASH_PID:-}" ] && kill -0 "$GNUCASH_PID" 2>/dev/null; then
+            echo ""
+            echo "[Cleanup] Process monitor closed. Gracefully terminating GnuCash (PID: $GNUCASH_PID)..."
+            kill -TERM "$GNUCASH_PID" 2>/dev/null || true
+            for _ in {1..10}; do
+                if ! kill -0 "$GNUCASH_PID" 2>/dev/null; then
+                    break
+                fi
+                sleep 0.5
+            done
+        fi
+
+        echo "[Cleanup] Securing session and creating post-session dated backups..."
+        backup_dated_vault "$TARGET_GNUCASH" "$TARGET_DIR"
+        if mountpoint -q "$USB_MOUNT" 2>/dev/null; then
+            backup_dated_usb "$TARGET_GNUCASH"
+        fi
+
+        release_cloud_lock
+        release_local_lock
+        notify "low" "GnuCash Joint Closed" "All changes and dated backups secured in FinanceVault."
+    }
+
+    # Trap signals for guaranteed clean termination without zombies
+    trap cleanup_session EXIT INT TERM HUP
+
+    # Acquire cloud session lock for the duration of this session
+    acquire_cloud_lock
+
+    echo "Launching GnuCash on $TARGET_GNUCASH..."
+    gnucash "$TARGET_GNUCASH" 200>&- &
+    GNUCASH_PID=$!
+
+    # Direct Vault Session Watcher
+    echo ""
+    echo "=========================================================="
+    echo " GnuCash Joint Active Session (PID: $GNUCASH_PID)"
+    echo " Security Mode: Direct Vault (Zero Local Plaintext)"
+    echo "   * Edits save directly to encrypted Cryptomator vault."
+    echo "   * You may minimize this terminal window while working."
+    echo "   * Closing this window or pressing Ctrl+C saves and exits."
+    echo "=========================================================="
+    echo ""
+    last_mtime=$(stat -c %Y "$TARGET_GNUCASH" 2>/dev/null || echo 0)
+
+    while kill -0 "$GNUCASH_PID" 2>/dev/null; do
+        sleep 3
+        current_mtime=$(stat -c %Y "$TARGET_GNUCASH" 2>/dev/null || echo 0)
+        if [ "$current_mtime" -gt "$last_mtime" ]; then
+            last_mtime="$current_mtime"
+            now_str=$(date '+%Y-%m-%d %H:%M:%S')
+            echo "[$now_str] [Save] Saved to encrypted Cryptomator vault."
+            notify "low" "GnuCash Saved" "Changes saved directly to encrypted FinanceVault."
+        fi
+    done
+
+    cleanup_session
+    trap - EXIT INT TERM HUP
+
+    echo ""
+    echo "GnuCash session ended."
+    if [ -t 1 ] && [ "${HOLD_TERMINAL:-true}" = true ]; then
+        echo "Closing process monitor in ${HOLD_SECONDS:-3} seconds..."
+        sleep "${HOLD_SECONDS:-3}"
+    fi
+    exit 0
+fi
+
+# --- Legacy Bidirectional Local Dir Mode Below ---
 
 echo "=========================================================="
 echo " GnuCash Joint Auto-Refresh Launcher"
