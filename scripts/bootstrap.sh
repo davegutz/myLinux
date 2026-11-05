@@ -20,7 +20,7 @@ echo -e "\n${GREEN}[Step 1/5] Detecting distribution and installing core tools..
 
 if [ -f /etc/arch-release ]; then
     echo "Detected Arch-based system (CachyOS)."
-    PACKAGES="git stow alacritty tmux zoxide curl base-devel"
+    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp"
     # Check if packages are missing before running pacman
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
@@ -38,7 +38,7 @@ if [ -f /etc/arch-release ]; then
 
 elif [ -f /etc/debian_version ]; then
     echo "Detected Debian/Ubuntu-based system (Lubuntu/Ubuntu)."
-    PACKAGES="git stow alacritty tmux zoxide curl build-essential"
+    PACKAGES="git stow alacritty tmux zoxide curl build-essential msmtp msmtp-mta"
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
         if ! dpkg -s "$pkg" >/dev/null 2>&1; then
@@ -70,6 +70,7 @@ mkdir -p "$HOME/.config/autostart"
 mkdir -p "$HOME/.config/systemd/user"
 mkdir -p "$HOME/.config/rclone"
 mkdir -p "$HOME/.local/state/rclone"
+mkdir -p "$HOME/.local/state/security-scan"
 mkdir -p "$HOME/.local/bin"
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/Desktop"
@@ -113,6 +114,14 @@ chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
 chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py "$HOME/bin/Rclone" 2>/dev/null || true
 chmod +x "$HOME/Desktop/"*.desktop "$HOME/.local/share/applications/"*.desktop 2>/dev/null || true
 
+# Secure msmtp mailer permissions (msmtp requires 0600 on config file)
+if [ -f "$HOME/.msmtprc" ]; then
+    chmod 600 "$HOME/.msmtprc" 2>/dev/null || true
+elif [ -f "$DOTFILES_DIR/common/.msmtprc.example" ]; then
+    cp "$DOTFILES_DIR/common/.msmtprc.example" "$HOME/.msmtprc"
+    chmod 600 "$HOME/.msmtprc" 2>/dev/null || true
+fi
+
 # Refresh desktop database for application menus
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
@@ -138,7 +147,7 @@ echo -e "${GREEN}   System configurations aligned successfully!       ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 echo -e "Next steps:"
 echo -e "  1. Reload your current shell session:"
-echo -e "     ${YELLOW}source ~/.bashrc${NC}"
+echo -e "     ${YELLOW}reload${NC} (or ${YELLOW}source ~/.bashrc${NC})"
 echo -e "  2. Launch Alacritty to test the unified terminal:"
 echo -e "     ${YELLOW}alacritty &${NC}"
 echo -e "  3. To synchronize updates in the future, run:"

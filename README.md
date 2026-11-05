@@ -19,7 +19,7 @@ cd myLinux
 ./scripts/bootstrap.sh
 
 # 3. Reload your terminal shell:
-source ~/.bashrc
+reload                # or: source ~/.bashrc
 ```
 
 ---
@@ -68,6 +68,7 @@ On any of your other computers, pull the latest commits and automatically re-sto
 
 ```bash
 dotfiles sync         # (or 'mylinux-sync')
+reload                # (or: 'source ~/.bashrc' to reload your shell)
 ```
 
 > [!TIP]
@@ -163,6 +164,7 @@ myLinux/
 ├── common/                               # Configurations shared across all builds (stowed to $HOME)
 │   ├── .bashrc                           # Unified interactive bash setup (git-aware prompt, colors, paths)
 │   ├── .bash_aliases                     # Global aliases, shortcuts, and repo quick-jumps
+│   ├── .msmtprc.example                  # Template configuration for msmtp Gmail alerts
 │   ├── .tmux.conf                        # Unified tmux multiplexer theme and configuration
 │   ├── bin/                              # User binaries stowed to ~/bin (in PATH)
 │   │   ├── encodeLinux.sh                # DVD transcode automation (outputs to ~/Videos/encodeLinux)
@@ -185,12 +187,18 @@ myLinux/
 │   │   │   └── refresh-joint.conf        # Configuration for GnuCash Joint Google Drive sync
 │   │   ├── gtk-3.0/
 │   │   │   └── settings.ini              # GTK-3 dark mode enforcement
-│   │   └── gtk-4.0/
-│   │       └── settings.ini              # GTK-4 dark mode enforcement
+│   │   ├── gtk-4.0/
+│   │   │   └── settings.ini              # GTK-4 dark mode enforcement
+│   │   └── systemd/
+│   │       └── user/
+│   │           ├── finance-sleep-lock.service # Auto-lock vaults on suspend/sleep
+│   │           ├── security-scan.service     # System & antivirus audit service
+│   │           └── security-scan.timer       # Weekly periodic scan timer
 │   └── .local/
 │       ├── bin/
 │       │   ├── gg                        # Launcher for Dave G's custom git_gui from myComputer
 │       │   ├── gnucash-refresh           # Safe cloud refresh engine & launcher for GnuCash & budget ODS
+│       │   ├── sys-security-scan         # Cross-distro antivirus, rootkit & system audit scanner
 │       │   ├── sys-update                # Universal package & flatpak updater (Arch + Ubuntu)
 │       │   └── dotfiles                  # myLinux repository management CLI (sync, daemon, autostart)
 │       └── share/
@@ -229,6 +237,7 @@ myLinux/
 │   ├── backup.sh                         # Safety backup engine for existing non-symlink dotfiles
 │   ├── install_fonts.sh                  # Installs JetBrains Mono Nerd Font cross-platform
 │   ├── setup_appearance.sh               # Enforces dark mode (GTK, KDE Plasma, LXQt)
+│   ├── security_scan.sh                  # Wrapper entrypoint for sys-security-scan
 │   └── link_mycomputer.sh                # Verifies and links resources with the myComputer repo
 └── README.md
 ```
@@ -251,7 +260,7 @@ cd myLinux
 ```
 
 ### What Bootstrap Automates:
-1. **Package Discovery & Installation**: Installs `git`, `stow`, `alacritty`, `tmux`, `zoxide`, `curl`, and build tools using `pacman` on CachyOS/Arch or `apt` on Lubuntu/Ubuntu.
+1. **Package Discovery & Installation**: Installs `git`, `stow`, `alacritty`, `tmux`, `zoxide`, `curl`, build tools, and `msmtp` using `pacman` on CachyOS/Arch or `apt` on Lubuntu/Ubuntu.
 2. **Safe Dotfile Backup**: Detects any existing unmanaged files in `$HOME` (e.g. `.bashrc`, `.bash_aliases`) and backs them up to `~/.dotfiles_backup/backup_<timestamp>/`.
 3. **Target Structure Creation**: Creates essential local directories (`~/.config/alacritty`, `~/.local/bin`, etc.) so GNU Stow symlinks individual configuration files rather than entire directory hierarchies.
 4. **GNU Stow Symlinking**: Links `common/*` cleanly into `$HOME`.
@@ -272,6 +281,8 @@ Once deployed, the following utilities and aliases are available in any terminal
 | `dotfiles check` | Queries GitHub to see if remote commits or updates are available |
 | `dotfiles autostart [DE]` | Stow or switch autostart profile (`cosmic`, `gnome`, `plasma`, `detect`, or `status`) |
 | `dotfiles daemon [action]` | Control daily rclone copy daemon (`status`, `enable`, `disable`, `run`, `logs`) |
+| `dotfiles security [action]` | Periodic security scanner & audit (`scan`, `timer`, `enable`, `disable`, `logs`) |
+| `sys-security-scan` / `sec-scan` | Runs full antivirus (ClamAV), rootkit (rkhunter), package integrity, and network audit |
 | `sys-update` | Runs the distribution-aware system updater directly |
 | `gg` | Launches Dave G's custom `git_gui.py` GUI tool from `myComputer` |
 | `reload` | Reloads `~/.bashrc` in the active shell |
@@ -378,6 +389,75 @@ dotfiles daemon disable
 > ```bash
 > loginctl enable-linger $USER
 > ```
+
+---
+
+## Periodic Security & Antivirus Audit (`sys-security-scan`)
+
+The repository includes a cross-distribution security scanner and system audit tool (`sys-security-scan`) designed to run on-demand or periodically on **CachyOS** (Arch-based) and **Lubuntu / Ubuntu** (Debian-based), with tailored diagnostics for **KDE Plasma** and **Lubuntu X11**.
+
+### Audit Workflows Executed:
+1. **Package Discovery & Prerequisites:**
+   - **CachyOS**: Verifies and installs `clamav` and `rkhunter` via `sudo pacman -S --needed clamav rkhunter`.
+   - **Lubuntu**: Verifies and installs `clamav`, `clamav-daemon`, and `rkhunter` via `sudo apt update && sudo apt install clamav clamav-daemon rkhunter -y`.
+2. **Virus Signature Updates (`freshclam`):**
+   - Automatically handles daemon file-locking (`clamav-freshclam.service`) on Debian/Ubuntu/Arch systems and runs `sudo freshclam`.
+3. **Filesystem Antivirus Scan (`clamscan`):**
+   - Runs `sudo clamscan -r --infected <target_directory>` (scans `/home/$USER/` by default, or `--dir <path>`).
+   - Alerts if infected files or signatures are found.
+4. **Rootkit Audit (`rkhunter`):**
+   - Updates the known-good file properties database (`sudo rkhunter --propupd`).
+   - Runs the non-interactive system check (`sudo rkhunter --check --sk`).
+5. **Package Database & File Integrity:**
+   - **CachyOS**: Runs `sudo pacman -Qk` to inspect missing or altered package files.
+   - **Lubuntu**: Runs `sudo dpkg -V` (and `sudo debsums -c` if present) to audit Debian package checksums.
+6. **Network Connections & Listening Sockets:**
+   - Runs `sudo ss -tupn` to inspect active established TCP/UDP sockets and process owners.
+   - Summarizes all open listening ports (`sudo ss -tulpn`).
+7. **Desktop Environment & Display Server Checks:**
+   - **KDE Plasma (`--plasma`)**: Audits screen locker active state (`qdbus org.freedesktop.ScreenSaver /ScreenSaver GetActive`), inspects Plasma autostart entries, and delivers passive notifications via `kdialog` / `notify-send`.
+   - **Lubuntu X11 (`--x11`)**: Audits `xhost` access control (flags if access control is disabled) and checks if the X11 display server is exposing remote TCP ports (6000-6063).
+
+### Usage & Commands:
+
+```bash
+# Run standard audit (auto-detects CachyOS vs Lubuntu, Plasma vs X11):
+sys-security-scan        # or 'sec-scan' or 'dotfiles security scan'
+
+# Run with explicit distro / desktop options:
+sys-security-scan --cachyos --plasma
+sys-security-scan --lubuntu --x11
+
+# Scan a custom folder:
+sys-security-scan --dir /home/daveg/Downloads
+
+# Run without re-checking package manager installations (fast / cron mode):
+sys-security-scan --skip-install
+
+# View the latest audit log file:
+dotfiles security logs   # or: cat $(sys-security-scan --log)
+```
+
+### Scheduling Periodic Scans:
+
+* **Systemd User Timer (`security-scan.timer`):**
+  A pre-configured systemd timer triggers a weekly background audit on Sundays at 03:30 AM with persistent catch-up if the machine was powered off.
+  ```bash
+  # Enable weekly timer:
+  dotfiles security enable    # or: sys-security-scan --timer enable
+
+  # Check timer status and next scheduled run:
+  dotfiles security timer     # or: sys-security-scan --timer status
+
+  # Disable timer:
+  dotfiles security disable   # or: sys-security-scan --timer disable
+  ```
+
+* **System / Root Crontab (Optional for unattended full sudo runs):**
+  To run fully automated without sudo password prompts, place an entry in `/etc/cron.weekly/security-scan`:
+  ```bash
+  sudo ln -sf /home/daveg/.local/bin/sys-security-scan /etc/cron.weekly/security-scan
+  ```
 
 ---
 

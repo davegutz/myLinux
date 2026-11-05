@@ -30,6 +30,7 @@ mkdir -p "$HOME/.config/autostart"
 mkdir -p "$HOME/.config/systemd/user"
 mkdir -p "$HOME/.config/rclone"
 mkdir -p "$HOME/.local/state/rclone"
+mkdir -p "$HOME/.local/state/security-scan"
 mkdir -p "$HOME/.local/bin"
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/Desktop"
@@ -64,6 +65,7 @@ stow -v -R -t "$HOME" rclone-backup
 chmod +x "$HOME/.local/bin/"* 2>/dev/null || true
 chmod +x "$HOME/bin/"*.sh "$HOME/bin/"*.py "$HOME/bin/Rclone" 2>/dev/null || true
 chmod +x "$HOME/Desktop/"*.desktop "$HOME/.local/share/applications/"*.desktop 2>/dev/null || true
+[ -f "$HOME/.msmtprc" ] && chmod 600 "$HOME/.msmtprc" 2>/dev/null || true
 
 # Refresh desktop database for application menus
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -82,7 +84,7 @@ if [[ "$*" == *"--update"* ]]; then
     "$DOTFILES_DIR/common/.local/bin/sys-update"
 fi
 
-echo -e "${GREEN}==============================================${NC}"
-echo -e "${GREEN}   Configurations synchronized successfully!  ${NC}"
-echo -e "${GREEN}   Run 'source ~/.bashrc' or restart terminal ${NC}"
-echo -e "${GREEN}==============================================${NC}"
+echo -e "${GREEN}========================================================${NC}"
+echo -e "${GREEN}   Configurations synchronized successfully!            ${NC}"
+echo -e "${GREEN}   Run 'reload' or 'source ~/.bashrc' or restart terminal${NC}"
+echo -e "${GREEN}========================================================${NC}"

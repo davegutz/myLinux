@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly myLinux Security & Antivirus Audit Timer
+Documentation=https://github.com/davegutz/myLinux
+
+[Timer]
+# Run weekly on Sunday at 03:30 AM (or shortly after boot if machine was powered down)
+OnCalendar=Sun *-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

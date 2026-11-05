@@ -53,3 +53,7 @@ alias cdsoc='cd ~/Documents/GitHub/mySOC'
 # --- System Synchronization & Updates ---
 alias mylinux-sync='~/Documents/GitHub/myLinux/scripts/sync.sh'
 alias mylinux-update='~/Documents/GitHub/myLinux/scripts/sync.sh --update'
+
+# --- Security Scanner & Audit ---
+alias sys-security-scan='sys-security-scan'
+alias sec-scan='sys-security-scan'

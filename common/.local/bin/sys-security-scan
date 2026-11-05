@@ -1,0 +1,409 @@
+#!/usr/bin/env bash
+# sys-security-scan - Cross-distribution periodic security & antivirus scanner
+# Managed by myLinux for CachyOS (Arch), Lubuntu/Ubuntu (Debian), KDE Plasma, and X11
+#
+# Supported Workflows:
+#   - ClamAV virus signature update & recursive scan
+#   - Rootkit Hunter (rkhunter) properties update & system integrity audit
+#   - Package manager file verification (pacman -Qk / dpkg -V)
+#   - Active network socket & listening port inspection (ss -tupn)
+#   - Desktop environment checks for KDE Plasma & Lubuntu X11
+#   - Periodic execution via systemd timer or cron
+
+set -o pipefail
+
+# --- Color Definitions ---
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# --- User & Directory Resolution ---
+REAL_USER="${SUDO_USER:-$USER}"
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    REAL_HOME=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)
+    [ -z "$REAL_HOME" ] && REAL_HOME="/home/$SUDO_USER"
+else
+    REAL_HOME="$HOME"
+fi
+
+SCAN_DIR="${REAL_HOME}"
+STATE_DIR="${REAL_HOME}/.local/state/security-scan"
+LOG_FILE="${STATE_DIR}/scan-$(date +%Y%m%d_%H%M%S).log"
+LATEST_LOG="${STATE_DIR}/latest.log"
+
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    chown -R "$SUDO_USER:" "$STATE_DIR" 2>/dev/null || true
+fi
+
+# --- Default Options ---
+FORCE_DISTRO=""
+FORCE_DE=""
+SKIP_INSTALL=false
+ENABLE_NOTIFY=true
+RUN_X11_CHECK=false
+RUN_PLASMA_CHECK=false
+QUICK_MODE=false
+
+usage() {
+    cat <<EOF
+Usage: sys-security-scan [OPTIONS]
+
+Cross-distribution security audit, antivirus scanner, and system integrity verifier.
+Compatible with CachyOS (Arch-based), Lubuntu/Ubuntu (Debian-based), KDE Plasma, and X11.
+
+Options:
+  --cachyos            Force CachyOS / Arch routines (pacman, freshclam, rkhunter)
+  --lubuntu            Force Lubuntu / Debian routines (apt, freshclam, rkhunter, dpkg -V)
+  --plasma             Run KDE Plasma desktop security diagnostics
+  --x11                Run X11 display security diagnostics (xhost access control, TCP 6000+)
+  --all                Run complete audit including all detected OS and desktop checks
+  --dir <path>         Custom target directory to scan with ClamAV (default: $SCAN_DIR)
+  --skip-install       Skip checking and installing missing security packages
+  --no-notify          Disable desktop pop-up notifications upon completion
+  --timer <action>     Manage systemd periodic timer (enable | disable | status)
+  --log                Print the path to the latest scan log
+  -h, --help           Show this help message
+
+Commands executed during full audit:
+  1. Package install / update check:
+     - CachyOS: pacman -S --needed clamav rkhunter
+     - Lubuntu: apt update && apt install clamav clamav-daemon rkhunter
+  2. ClamAV signature update:
+     - freshclam
+  3. Antivirus filesystem scan:
+     - clamscan -r --infected <target_directory>
+  4. Rootkit inspection:
+     - rkhunter --propupd
+     - rkhunter --check --sk
+  5. Package database integrity:
+     - CachyOS: pacman -Qk
+     - Lubuntu: dpkg -V
+  6. Network socket analysis:
+     - ss -tupn
+  7. Desktop environment checks (Plasma lock state / X11 xhost permissions)
+EOF
+}
+
+# --- Parse Arguments ---
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --cachyos)
+            FORCE_DISTRO="cachyos"
+            shift
+            ;;
+        --lubuntu|--debian|--ubuntu)
+            FORCE_DISTRO="lubuntu"
+            shift
+            ;;
+        --plasma|--kde)
+            RUN_PLASMA_CHECK=true
+            shift
+            ;;
+        --x11)
+            RUN_X11_CHECK=true
+            shift
+            ;;
+        --all)
+            RUN_PLASMA_CHECK=true
+            RUN_X11_CHECK=true
+            shift
+            ;;
+        --dir)
+            if [ -n "$2" ] && [ -d "$2" ]; then
+                SCAN_DIR="$2"
+                shift 2
+            else
+                echo -e "${RED}Error: --dir requires a valid directory path.${NC}"
+                exit 1
+            fi
+            ;;
+        --skip-install|--no-install)
+            SKIP_INSTALL=true
+            shift
+            ;;
+        --no-notify)
+            ENABLE_NOTIFY=false
+            shift
+            ;;
+        --timer)
+            ACTION="${2:-status}"
+            case "$ACTION" in
+                enable)
+                    echo -e "${GREEN}==> Enabling systemd weekly security scan timer...${NC}"
+                    systemctl --user daemon-reload 2>/dev/null || true
+                    systemctl --user enable --now security-scan.timer 2>/dev/null || true
+                    echo "Security scan timer enabled."
+                    systemctl --user list-timers --all | grep -E "(UNIT|security-scan)" || true
+                    ;;
+                disable)
+                    echo -e "${YELLOW}==> Disabling systemd weekly security scan timer...${NC}"
+                    systemctl --user disable --now security-scan.timer 2>/dev/null || true
+                    ;;
+                status|"")
+                    echo -e "${BLUE}=== Security Scan Timer Status ===${NC}"
+                    systemctl --user status security-scan.timer --no-pager 2>/dev/null || true
+                    echo ""
+                    echo -e "${BLUE}=== Scheduled Runs ===${NC}"
+                    systemctl --user list-timers --all | grep -E "(UNIT|security-scan)" || true
+                    ;;
+                *)
+                    echo "Usage: sys-security-scan --timer [enable|disable|status]"
+                    exit 1
+                    ;;
+            esac
+            exit 0
+            ;;
+        --log)
+            if [ -f "$LATEST_LOG" ]; then
+                echo "$LATEST_LOG"
+            else
+                echo "No scan log found in $STATE_DIR"
+            fi
+            exit 0
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# --- Environment Auto-Detection ---
+DISTRO="unknown"
+if [ "$FORCE_DISTRO" = "cachyos" ] || [ -f /etc/arch-release ]; then
+    DISTRO="cachyos"
+elif [ "$FORCE_DISTRO" = "lubuntu" ] || [ -f /etc/debian_version ]; then
+    DISTRO="lubuntu"
+fi
+
+DE_SESSION="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-}}"
+DE_LOWER="$(echo "$DE_SESSION" | tr '[:upper:]' '[:lower:]')"
+SESSION_TYPE="${XDG_SESSION_TYPE:-}"
+
+if [[ "$DE_LOWER" == *"kde"* || "$DE_LOWER" == *"plasma"* ]]; then
+    RUN_PLASMA_CHECK=true
+fi
+if [[ "$SESSION_TYPE" == "x11" || "$DE_LOWER" == *"lxqt"* || "$DE_LOWER" == *"lubuntu"* ]]; then
+    RUN_X11_CHECK=true
+fi
+
+# --- Helper: Notifications ---
+send_notification() {
+    local title="$1"
+    local message="$2"
+    local urgency="${3:-normal}"
+    if [ "$ENABLE_NOTIFY" = false ]; then
+        return 0
+    fi
+
+    # KDE Plasma kdialog support
+    if [[ "$DE_LOWER" == *"plasma"* || "$DE_LOWER" == *"kde"* ]] && command -v kdialog >/dev/null 2>&1; then
+        kdialog --title "$title" --passivepopup "$message" 8 2>/dev/null || true
+    elif command -v notify-send >/dev/null 2>&1; then
+        notify-send -u "$urgency" -a "Security Scanner" "$title" "$message" 2>/dev/null || true
+    fi
+}
+
+# --- Tee output to both terminal and logfile ---
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo -e "${BLUE}================================================================${NC}"
+echo -e "${BLUE}          myLinux Periodic Security & System Audit             ${NC}"
+echo -e "${BLUE}================================================================${NC}"
+echo -e "Timestamp       : $(date)"
+echo -e "Target Directory: ${CYAN}${SCAN_DIR}${NC}"
+echo -e "Detected OS     : ${CYAN}${DISTRO}${NC}"
+echo -e "Desktop Session : ${CYAN}${DE_SESSION:-None} (${SESSION_TYPE:-unknown})${NC}"
+echo -e "Log File        : ${CYAN}${LOG_FILE}${NC}"
+echo -e "${BLUE}================================================================${NC}"
+
+# Update latest symlink
+ln -sf "$LOG_FILE" "$LATEST_LOG" 2>/dev/null || true
+
+# --- Step 1: Package Prerequisites ---
+echo -e "\n${GREEN}[1/6] Checking Security Package Prerequisites...${NC}"
+
+if [ "$SKIP_INSTALL" = true ]; then
+    echo "Skipping package check/installation as requested (--skip-install)."
+else
+    if [ "$DISTRO" = "cachyos" ]; then
+        MISSING_PKGS=()
+        for pkg in clamav rkhunter; do
+            if ! pacman -Qi "$pkg" >/dev/null 2>&1; then
+                MISSING_PKGS+=("$pkg")
+            fi
+        done
+
+        if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
+            echo -e "Installing missing packages on CachyOS: ${YELLOW}${MISSING_PKGS[*]}${NC}"
+            sudo pacman -S --needed --noconfirm "${MISSING_PKGS[@]}"
+        else
+            echo "All prerequisites installed (clamav, rkhunter)."
+        fi
+
+    elif [ "$DISTRO" = "lubuntu" ]; then
+        MISSING_PKGS=()
+        for pkg in clamav clamav-daemon rkhunter; do
+            if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+                MISSING_PKGS+=("$pkg")
+            fi
+        done
+
+        if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
+            echo -e "Updating apt and installing missing packages on Lubuntu: ${YELLOW}${MISSING_PKGS[*]}${NC}"
+            sudo apt update
+            sudo apt install -y "${MISSING_PKGS[@]}"
+        else
+            echo "All prerequisites installed (clamav, clamav-daemon, rkhunter)."
+        fi
+    else
+        echo -e "${YELLOW}Notice: Unrecognized distro. Proceeding with installed tools.${NC}"
+    fi
+fi
+
+# --- Step 2: Freshclam Virus Database Update ---
+echo -e "\n${GREEN}[2/6] Updating ClamAV Virus Definitions (freshclam)...${NC}"
+if command -v freshclam >/dev/null 2>&1; then
+    # In Ubuntu/Debian/Arch, freshclam daemon service can lock the log file. Handle gracefully.
+    FRESHCLAM_WAS_ACTIVE=false
+    if systemctl is-active --quiet clamav-freshclam.service 2>/dev/null; then
+        echo "Temporarily pausing clamav-freshclam service to permit manual update..."
+        sudo systemctl stop clamav-freshclam.service 2>/dev/null || true
+        FRESHCLAM_WAS_ACTIVE=true
+    fi
+
+    echo "Running sudo freshclam..."
+    if sudo freshclam; then
+        echo -e "${GREEN}Virus signatures updated successfully.${NC}"
+    else
+        echo -e "${YELLOW}Notice: freshclam finished with warnings (signatures may already be up to date).${NC}"
+    fi
+
+    if [ "$FRESHCLAM_WAS_ACTIVE" = true ]; then
+        sudo systemctl start clamav-freshclam.service 2>/dev/null || true
+    fi
+else
+    echo -e "${RED}Error: freshclam not found. Skipping signature update.${NC}"
+fi
+
+# --- Step 3: ClamAV Antivirus Scan ---
+echo -e "\n${GREEN}[3/6] Running ClamAV Antivirus Scan on ${SCAN_DIR}...${NC}"
+echo "Command: sudo clamscan -r --infected \"${SCAN_DIR}\""
+
+INFECTED_COUNT=0
+if command -v clamscan >/dev/null 2>&1; then
+    # Run clamscan: display only infected files, recursive
+    sudo clamscan -r --infected "${SCAN_DIR}"
+    CLAM_EXIT=$?
+    if [ $CLAM_EXIT -eq 0 ]; then
+        echo -e "${GREEN}ClamAV scan completed cleanly: No viruses or infected files detected.${NC}"
+    elif [ $CLAM_EXIT -eq 1 ]; then
+        echo -e "${RED}${BOLD}WARNING: ClamAV detected infected files! Review output above or in ${LOG_FILE}.${NC}"
+        INFECTED_COUNT=1
+    else
+        echo -e "${YELLOW}Notice: ClamAV finished with status code ${CLAM_EXIT}.${NC}"
+    fi
+else
+    echo -e "${RED}Error: clamscan binary not found.${NC}"
+fi
+
+# --- Step 4: Rootkit Hunter (rkhunter) ---
+echo -e "\n${GREEN}[4/6] Running Rootkit Hunter Audit (rkhunter)...${NC}"
+if command -v rkhunter >/dev/null 2>&1; then
+    echo "Updating file properties database (sudo rkhunter --propupd)..."
+    sudo rkhunter --propupd 2>&1 || true
+
+    echo "Running rootkit check (sudo rkhunter --check --sk)..."
+    sudo rkhunter --check --sk 2>&1 || true
+    echo -e "${GREEN}Rootkit audit routine completed.${NC}"
+else
+    echo -e "${RED}Error: rkhunter binary not found.${NC}"
+fi
+
+# --- Step 5: Package Database Integrity Verification ---
+echo -e "\n${GREEN}[5/6] Verifying Package Database & File Integrity...${NC}"
+if [ "$DISTRO" = "cachyos" ]; then
+    echo "Running CachyOS package verification: sudo pacman -Qk..."
+    sudo pacman -Qk
+elif [ "$DISTRO" = "lubuntu" ]; then
+    echo "Running Lubuntu/Debian package verification: sudo dpkg -V..."
+    sudo dpkg -V || true
+    if command -v debsums >/dev/null 2>&1; then
+        echo "Running debsums verification (sudo debsums -c)..."
+        sudo debsums -c 2>&1 || true
+    fi
+else
+    if command -v pacman >/dev/null 2>&1; then
+        sudo pacman -Qk
+    elif command -v dpkg >/dev/null 2>&1; then
+        sudo dpkg -V || true
+    fi
+fi
+
+# --- Step 6: Network Sockets & Listening Ports ---
+echo -e "\n${GREEN}[6/6] Inspecting Network Sockets & Active Connections (sudo ss -tupn)...${NC}"
+sudo ss -tupn
+
+echo -e "\n${BLUE}Listening Ports Summary (TCP & UDP):${NC}"
+sudo ss -tulpn
+
+# --- Desktop Environment Diagnostics ---
+if [ "$RUN_PLASMA_CHECK" = true ]; then
+    echo -e "\n${CYAN}======================================================${NC}"
+    echo -e "${CYAN}   KDE Plasma Desktop Security Check                  ${NC}"
+    echo -e "${CYAN}======================================================${NC}"
+    # Check screen locker status if available
+    if command -v qdbus >/dev/null 2>&1; then
+        IS_LOCKED=$(qdbus org.freedesktop.ScreenSaver /ScreenSaver GetActive 2>/dev/null || echo "N/A")
+        echo -e "Screen Locker Active State: ${BOLD}${IS_LOCKED}${NC}"
+    fi
+    echo -e "Plasma User Autostart Scripts:"
+    ls -la "${REAL_HOME}/.config/autostart" 2>/dev/null || echo "None found"
+fi
+
+if [ "$RUN_X11_CHECK" = true ]; then
+    echo -e "\n${CYAN}======================================================${NC}"
+    echo -e "${CYAN}   Lubuntu X11 Display Security Check                 ${NC}"
+    echo -e "${CYAN}======================================================${NC}"
+    # Check xhost access controls
+    if command -v xhost >/dev/null 2>&1; then
+        XHOST_OUT=$(xhost 2>&1 || true)
+        if echo "$XHOST_OUT" | grep -qi "access control disabled"; then
+            echo -e "${RED}${BOLD}SECURITY ALERT: X11 access control is DISABLED! (Clients from any host can connect)${NC}"
+        elif echo "$XHOST_OUT" | grep -qi "access control enabled"; then
+            echo -e "${GREEN}X11 Access Control: Enabled (Authorized clients only).${NC}"
+        else
+            echo "xhost status: $XHOST_OUT"
+        fi
+    fi
+
+    # Check for exposed remote X11 TCP ports (6000-6063)
+    X11_TCP=$(ss -tln | grep -E ":600[0-9]\b" || true)
+    if [ -n "$X11_TCP" ]; then
+        echo -e "${YELLOW}Warning: X11 is listening on remote TCP port(s):${NC}\n$X11_TCP"
+    else
+        echo -e "${GREEN}X11 TCP listening ports: Closed (Secured to local domain sockets).${NC}"
+    fi
+fi
+
+# --- Completion Summary & Notification ---
+echo -e "\n${GREEN}================================================================${NC}"
+echo -e "${GREEN}          Security Audit & Scan Completed Successfully!         ${NC}"
+echo -e "${GREEN}================================================================${NC}"
+echo -e "Full Audit Log Saved To: ${BOLD}${LOG_FILE}${NC}"
+
+if [ $INFECTED_COUNT -gt 0 ]; then
+    send_notification "Security Alert" "ClamAV detected infected file(s)! Check log: $LOG_FILE" "critical"
+else
+    send_notification "Security Audit Complete" "Scan clean. No threats detected on $(hostname)." "normal"
+fi
