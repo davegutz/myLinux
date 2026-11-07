@@ -26,6 +26,7 @@ mkdir -p "$MOUNT_DIR"
 echo "Mounting Google Drive to $MOUNT_DIR..."
 if command -v systemd-run >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
     systemctl --user stop rclone-mount.service 2>/dev/null || true
+    systemctl --user reset-failed rclone-mount.service 2>/dev/null || true
     systemd-run --user --unit=rclone-mount rclone mount gdrive: "$MOUNT_DIR" \
         --vfs-cache-mode full \
         --vfs-cache-max-size 50G \
