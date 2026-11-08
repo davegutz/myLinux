@@ -20,7 +20,7 @@ echo -e "\n${GREEN}[Step 1/5] Detecting distribution and installing core tools..
 
 if [ -f /etc/arch-release ]; then
     echo "Detected Arch-based system (CachyOS)."
-    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp"
+    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp rclone fuse3"
     # Check if packages are missing before running pacman
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
@@ -38,7 +38,7 @@ if [ -f /etc/arch-release ]; then
 
 elif [ -f /etc/debian_version ]; then
     echo "Detected Debian/Ubuntu-based system (Lubuntu/Ubuntu)."
-    PACKAGES="git stow alacritty tmux zoxide curl build-essential msmtp msmtp-mta"
+    PACKAGES="git stow alacritty tmux zoxide curl build-essential msmtp msmtp-mta rclone fuse3"
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
         if ! dpkg -s "$pkg" >/dev/null 2>&1; then

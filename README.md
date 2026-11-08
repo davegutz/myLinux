@@ -262,7 +262,7 @@ cd myLinux
 ```
 
 ### What Bootstrap Automates:
-1. **Package Discovery & Installation**: Installs `git`, `stow`, `alacritty`, `tmux`, `zoxide`, `curl`, build tools, and `msmtp` using `pacman` on CachyOS/Arch or `apt` on Lubuntu/Ubuntu.
+1. **Package Discovery & Installation**: Installs `git`, `stow`, `alacritty`, `tmux`, `zoxide`, `curl`, build tools, `msmtp`, `rclone`, and `fuse3` using `pacman` on CachyOS/Arch or `apt` on Lubuntu/Ubuntu.
 2. **Safe Dotfile Backup**: Detects any existing unmanaged files in `$HOME` (e.g. `.bashrc`, `.bash_aliases`) and backs them up to `~/.dotfiles_backup/backup_<timestamp>/`.
 3. **Target Structure Creation**: Creates essential local directories (`~/.config/alacritty`, `~/.local/bin`, etc.) so GNU Stow symlinks individual configuration files rather than entire directory hierarchies.
 4. **GNU Stow Symlinking**: Links `common/*` cleanly into `$HOME`.
