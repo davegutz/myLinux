@@ -609,6 +609,35 @@ sudo cryptsetup refresh --allow-discards home-daveg
 
 ---
 
+### 3. Prevent Hanging / Infinite-Spinning Shutdowns (`--auto-resize-mode=grow`) & SDDM Login Cleanup
+By default, `systemd-homed` uses `shrink-and-grow` mode on BTRFS loopback containers, causing `systemd-homework` to shrink `/home/daveg.home` and relocate tens of thousands of BTRFS extents on every logout or shutdown. On eMMC storage, this causes shutdowns to spin for several minutes.
+
+1. **Configure `systemd-homed` to only grow the container automatically** (and rely on `clean_root.sh` / `fstrim` to punch sparse holes back to `/`):
+   ```bash
+   sudo homectl update daveg --auto-resize-mode=grow
+   ```
+
+2. **Show `systemd-homed` users on SDDM while hiding `nobody` (UID 65534):**
+   Because `systemd-homed` assigns UIDs in the `60001`–`60513` range (e.g., `60224`), raising `MaximumUid` to `65535` accidentally exposes the built-in `nobody` account (`65534`) on the login screen. Cap `MaximumUid` at `60513` and explicitly hide `nobody`:
+   ```bash
+   sudo nano /etc/sddm.conf
+   ```
+   ```ini
+   [Users]
+   MinimumUid=1000
+   MaximumUid=60513
+   HideUsers=nobody
+   ```
+
+3. **Remove temporary setup accounts (e.g., `tempadmin`):**
+   After confirming `daveg` has working `sudo` privileges (`groups daveg && sudo -v`), remove unused setup accounts so lingering background sessions do not hit the 90s systemd stop timeout on shutdown:
+   ```bash
+   sudo loginctl terminate-user tempadmin
+   sudo deluser --remove-home tempadmin
+   ```
+
+---
+
 ## Machine-Specific Customization (`.bashrc.local`)
 
 To add machine-specific exports, unique API tokens, or hardware-specific aliases without committing them to the shared repository:
