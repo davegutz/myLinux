@@ -235,6 +235,8 @@ myLinux/
 │   ├── bootstrap.sh                      # Main idempotent onboarding & setup script
 │   ├── sync.sh                           # Sync changes from Git, re-stow, and optional package upgrade
 │   ├── backup.sh                         # Safety backup engine for existing non-symlink dotfiles
+│   ├── clean_root.sh                     # Root (/) & systemd-homed loopback cleanup + fstrim utility
+│   ├── tune_homed_encryption.sh          # Reversible systemd-homed LUKS & eMMC I/O performance tuner
 │   ├── install_fonts.sh                  # Installs JetBrains Mono Nerd Font cross-platform
 │   ├── setup_appearance.sh               # Enforces dark mode (GTK, KDE Plasma, LXQt)
 │   ├── security_scan.sh                  # Wrapper entrypoint for sys-security-scan
@@ -547,6 +549,62 @@ gnucash-refresh --open-ods
 
 # Open the local documents directory:
 gnucash-refresh --open-folder
+```
+
+---
+
+## Disk Space Recovery & `systemd-homed` Encryption I/O Optimization
+
+On compact eMMC laptops (such as the Lenovo Celeron N4120 running Lubuntu 24.04 on a 64 GB `/dev/mmcblk0p2` drive), `$HOME` (`/home/daveg`) is often mounted as a `systemd-homed` LUKS2 container (`/dev/mapper/home-daveg`) backed by a sparse loopback image file (`/home/daveg.home`) stored directly on the root (`/`) filesystem.
+
+### 1. Reclaiming Root (`/`) & Loopback Disk Space (`scripts/clean_root.sh`)
+When files are deleted inside `/home/daveg`, the backing file `/home/daveg.home` on `/` retains those allocated blocks until `fstrim` punches sparse holes back into the loopback image. Combined with `snapd` retaining old `.snap` revisions and `apt` caching `.deb` packages, `/` can hit 98%+ usage (`E: You don't have enough free space in /var/cache/apt/archives/`) even when `/home/daveg` shows plenty of free space.
+
+Run the automated cleanup script at any time:
+```bash
+~/Documents/GitHub/myLinux/scripts/clean_root.sh
+```
+**What `clean_root.sh` does:**
+1. Cleans `/var/cache/apt/archives` (`apt-get clean`) or `pacman` cache (`paccache`).
+2. Purges orphaned packages and old kernels (`apt-get autoremove --purge -y`).
+3. Vacuums systemd journal logs to `50M` and deletes rotated `/var/log/*.gz` and `/var/crash` files.
+4. Purges `/var/lib/snapd/cache/*` and removes all `disabled` (superseded) Snap revisions while keeping active Snap versions untouched.
+5. Clears `~/.cache/rclone`, `~/.cache/thumbnails`, and `~/.local/share/Trash`.
+6. Runs `sudo fstrim -v "$HOME"` and `sudo fstrim -v /` to punch sparse holes in `/home/daveg.home` and immediately return freed `$HOME` blocks back to `/`.
+
+---
+
+### 2. `systemd-homed` LUKS & eMMC I/O Performance Tuning (`scripts/tune_homed_encryption.sh`)
+
+#### Why Loopback Encryption Slows Down Small Random Writes (~15%–25%)
+* **AES Cipher Overhead (~1%–3%):** Even low-power CPUs like the Intel Celeron N4120 include hardware **AES-NI** (`aes`) and **SHA-NI** (`sha_ni`) instructions capable of ~1.2–1.8 GB/s—far faster than eMMC flash storage.
+* **Loopback + Double Filesystem Overhead (~10%–25%):** Because `/home/daveg` is a filesystem inside `/dev/mapper/home-daveg` $\rightarrow$ `dm-crypt` $\rightarrow$ `/dev/loop` $\rightarrow$ `/home/daveg.home` $\rightarrow$ `/` ext4, every random write or metadata update (IDE indexing, browser SQLite writes, `git`, Rclone cache) passes through two filesystem layers and `dm-crypt`'s asynchronous kernel workqueues.
+
+#### What the Optimizer Changes (Fail-Safe & Non-Destructive)
+`scripts/tune_homed_encryption.sh` **never** modifies LUKS keyslots or `systemd-homed`'s signed `.identity` record (so it cannot lock you out of your account). Instead, it installs a lightweight post-mount systemd unit (`/etc/systemd/system/homed-io-tune-daveg.service`, triggered `After=home-daveg.mount` with fail-safe `ExecStart=-...` directives) that applies two live kernel optimizations:
+1. **`mount -o remount,noatime /home/daveg`**: Eliminates access-timestamp disk writes on every file read inside `/home/daveg`.
+2. **`cryptsetup refresh --perf-no_read_workqueue --perf-no_write_workqueue --allow-discards home-daveg`**: Bypasses `dm-crypt`'s redundant read/write kernel workqueues so hardware AES-NI encryption runs inline on the calling CPU thread without context-switching latency, while keeping TRIM/discard active.
+
+#### Usage & Recovery Commands
+```bash
+# 1. Apply the optimizations now and enable across reboots:
+~/Documents/GitHub/myLinux/scripts/tune_homed_encryption.sh --apply
+
+# 2. Check active mount flags and dm-crypt table flags:
+~/Documents/GitHub/myLinux/scripts/tune_homed_encryption.sh --status
+
+# 3. Revert back to stock defaults at any time (1 command, no reboot required):
+~/Documents/GitHub/myLinux/scripts/tune_homed_encryption.sh --revert
+```
+
+#### Manual Emergency Recovery (Without the Script)
+If you ever want to revert manually from any root shell or recovery terminal:
+```bash
+sudo systemctl disable --now homed-io-tune-daveg.service
+sudo rm -f /etc/systemd/system/homed-io-tune-daveg.service
+sudo systemctl daemon-reload
+sudo mount -o remount,relatime /home/daveg
+sudo cryptsetup refresh --allow-discards home-daveg
 ```
 
 ---
