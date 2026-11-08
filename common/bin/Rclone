@@ -1,6 +1,32 @@
 #!/bin/bash
 MOUNT_DIR="$HOME/gdrive"
 
+# Determine safe VFS cache limits based on distro / $HOME partition size
+# (Can be overridden via RCLONE_VFS_CACHE_MAX_SIZE and RCLONE_VFS_CACHE_MAX_AGE in ~/.bashrc.local)
+if [ -z "${RCLONE_VFS_CACHE_MAX_SIZE:-}" ]; then
+    HOME_TOTAL_GB=$(df -PB1G "$HOME" 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$2); print $2}')
+    if [ -z "$HOME_TOTAL_GB" ] && command -v python3 >/dev/null 2>&1; then
+        HOME_TOTAL_GB=$(python3 -c 'import os, shutil; print(int(shutil.disk_usage(os.path.expanduser("~")).total // (1024**3)))' 2>/dev/null || echo "")
+    fi
+
+    if [ -n "$HOME_TOTAL_GB" ] && [ "$HOME_TOTAL_GB" -le 40 ] 2>/dev/null; then
+        RCLONE_VFS_CACHE_MAX_SIZE="2G"
+        RCLONE_VFS_CACHE_MAX_AGE="${RCLONE_VFS_CACHE_MAX_AGE:-6h}"
+    elif [ -n "$HOME_TOTAL_GB" ] && [ "$HOME_TOTAL_GB" -le 120 ] 2>/dev/null; then
+        RCLONE_VFS_CACHE_MAX_SIZE="10G"
+        RCLONE_VFS_CACHE_MAX_AGE="${RCLONE_VFS_CACHE_MAX_AGE:-12h}"
+    elif [ -f /etc/debian_version ]; then
+        # Conservative default for Lubuntu/Ubuntu installs if disk size detection is unavailable
+        RCLONE_VFS_CACHE_MAX_SIZE="2G"
+        RCLONE_VFS_CACHE_MAX_AGE="${RCLONE_VFS_CACHE_MAX_AGE:-6h}"
+    else
+        RCLONE_VFS_CACHE_MAX_SIZE="50G"
+        RCLONE_VFS_CACHE_MAX_AGE="${RCLONE_VFS_CACHE_MAX_AGE:-24h}"
+    fi
+else
+    RCLONE_VFS_CACHE_MAX_AGE="${RCLONE_VFS_CACHE_MAX_AGE:-24h}"
+fi
+
 # Clean up any stale or disconnected FUSE mountpoint before checking
 if ! mountpoint -q "$MOUNT_DIR" 2>/dev/null; then
     fusermount3 -u -z "$MOUNT_DIR" 2>/dev/null || true
@@ -23,14 +49,14 @@ fi
 mkdir -p "$MOUNT_DIR"
 
 # 3. Mount Google Drive in background (prefer systemd-run if available, else standard background)
-echo "Mounting Google Drive to $MOUNT_DIR..."
+echo "Mounting Google Drive to $MOUNT_DIR (VFS cache max: $RCLONE_VFS_CACHE_MAX_SIZE, max age: $RCLONE_VFS_CACHE_MAX_AGE)..."
 if command -v systemd-run >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
     systemctl --user stop rclone-mount.service 2>/dev/null || true
     systemctl --user reset-failed rclone-mount.service 2>/dev/null || true
     systemd-run --user --unit=rclone-mount rclone mount gdrive: "$MOUNT_DIR" \
         --vfs-cache-mode full \
-        --vfs-cache-max-size 50G \
-        --vfs-cache-max-age 24h \
+        --vfs-cache-max-size "$RCLONE_VFS_CACHE_MAX_SIZE" \
+        --vfs-cache-max-age "$RCLONE_VFS_CACHE_MAX_AGE" \
         --dir-cache-time 1000h \
         --drive-chunk-size 128M \
         --buffer-size 64M \
@@ -43,8 +69,8 @@ if command -v systemd-run >/dev/null 2>&1 && systemctl --user status >/dev/null 
 else
     nohup rclone mount gdrive: "$MOUNT_DIR" \
         --vfs-cache-mode full \
-        --vfs-cache-max-size 50G \
-        --vfs-cache-max-age 24h \
+        --vfs-cache-max-size "$RCLONE_VFS_CACHE_MAX_SIZE" \
+        --vfs-cache-max-age "$RCLONE_VFS_CACHE_MAX_AGE" \
         --dir-cache-time 1000h \
         --drive-chunk-size 128M \
         --buffer-size 64M \

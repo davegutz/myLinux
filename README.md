@@ -289,7 +289,7 @@ Once deployed, the following utilities and aliases are available in any terminal
 | `suspend` | Calls `suspend_until 14:30` |
 | `movmov` | Moves staged media to `/media/daveg/Lib/Movies` |
 | `gnucash-refresh` / `gnucash-joint` | Refreshes `Gutz_joint.gnucash` and budget `.ods` files from Google Drive and opens GnuCash |
-| `Rclone` | Mounts Google Drive (`gdrive:`) to `~/gdrive` with 50GB VFS cache and warms directory tree |
+| `Rclone` | Mounts Google Drive (`gdrive:`) to `~/gdrive` with disk-aware VFS cache (`2G` on Lubuntu/small partitions, `50G` on large workstations) and warms directory tree |
 | `cdmylinux` / `cdcomp` | Quickly changes directory to `myLinux` or `myComputer` |
 | `gs`, `ga`, `gc`, `gp`, `gl`, `gd` | Standard Git shortcuts (`status`, `add`, `commit`, `push`, `pull`, `diff`) |
 

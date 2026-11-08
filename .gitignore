@@ -8,3 +8,4 @@ __pycache__/
 *.pyc
 .msmtprc
 common/.msmtprc
+.idea/

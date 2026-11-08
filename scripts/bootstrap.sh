@@ -48,7 +48,12 @@ elif [ -f /etc/debian_version ]; then
 
     if [ -n "$MISSING_PKGS" ]; then
         echo "Installing missing packages:$MISSING_PKGS"
+        if [ -f "/home/${USER}.home" ]; then
+            sudo fstrim "$HOME" 2>/dev/null || true
+        fi
+        sudo apt-get clean || true
         sudo apt update && sudo apt install -y $MISSING_PKGS
+        sudo apt-get clean || true
     else
         echo "Core packages already installed."
     fi
