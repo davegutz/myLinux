@@ -20,7 +20,7 @@ echo -e "\n${GREEN}[Step 1/5] Detecting distribution and installing core tools..
 
 if [ -f /etc/arch-release ]; then
     echo "Detected Arch-based system (CachyOS)."
-    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp rclone fuse3"
+    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp rclone fuse3 libfido2"
     # Check if packages are missing before running pacman
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
@@ -38,7 +38,7 @@ if [ -f /etc/arch-release ]; then
 
 elif [ -f /etc/debian_version ]; then
     echo "Detected Debian/Ubuntu-based system (Lubuntu/Ubuntu)."
-    PACKAGES="git stow alacritty tmux zoxide curl build-essential msmtp msmtp-mta rclone fuse3"
+    PACKAGES="git stow alacritty tmux zoxide curl build-essential msmtp msmtp-mta rclone fuse3 libfido2-1"
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
         if ! dpkg -s "$pkg" >/dev/null 2>&1; then
@@ -56,6 +56,11 @@ elif [ -f /etc/debian_version ]; then
         sudo apt-get clean || true
     else
         echo "Core packages already installed."
+    fi
+
+    # Ensure Snap Firefox has u2f-devices access for YubiKey / FIDO2 WebAuthn
+    if command -v snap >/dev/null 2>&1 && snap list firefox >/dev/null 2>&1; then
+        sudo snap connect firefox:u2f-devices 2>/dev/null || true
     fi
 else
     echo -e "${YELLOW}Notice: Unsupported or unrecognized distribution. Skipping package installation.${NC}"
