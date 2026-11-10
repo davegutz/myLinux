@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+#
+# omen-rgb - Control HP OMEN 4-Zone RGB keyboard backlight
+#
+
+set -euo pipefail
+
+print_hints() {
+    local rc=$?
+    echo ""
+    echo "Hint: Press Fn+F4 (or F4) to toggle the keyboard backlight on/off."
+    echo "Hint: If backlight turns off after 30s of inactivity, enter BIOS (F10 at boot) and set 'Keyboard Backlight Timeout' to 'Never'."
+    return "$rc"
+}
+trap print_hints EXIT
+
+LED_DIR="/sys/class/leds"
+ZONES=("wasd" "left" "center" "right")
+DEFAULT_BRIGHTNESS="48"
+
+# Named color presets (R G B)
+declare -A PRESETS=(
+    ["white"]="255 255 255"
+    ["red"]="255 0 0"
+    ["green"]="0 255 0"
+    ["blue"]="0 120 255"
+    ["cyan"]="0 255 255"
+    ["purple"]="180 0 255"
+    ["yellow"]="255 200 0"
+    ["orange"]="255 80 0"
+    ["pink"]="255 50 150"
+    ["warm-white"]="255 200 120"
+)
+
+usage() {
+    cat <<EOF
+Usage: omen-rgb <command> [arguments]
+
+Commands:
+    on [color]               Turn on all zones (default: white, brightness 48)
+    off                      Turn off all keyboard backlight
+    color <name|R G B>       Set all zones to a color at default brightness (48)
+    zone <zone> <name|R G B> Set a specific zone (wasd, left, center, right)
+    brightness [0-255]       Set backlight brightness (default: 48)
+    status                   Show current status of all keyboard backlight zones
+    gamer                    Preset: WASD in Red, Left/Center/Right in Cyan
+
+Available color presets:
+    white, warm-white, red, green, blue, cyan, purple, yellow, orange, pink
+
+Examples:
+    omen-rgb on
+    omen-rgb on cyan
+    omen-rgb color 255 100 0
+    omen-rgb zone wasd red
+    omen-rgb brightness 255
+    omen-rgb gamer
+EOF
+}
+
+check_writable() {
+    local target="$1"
+    if [[ ! -w "$target" ]]; then
+        return 1
+    fi
+    return 0
+}
+
+write_val() {
+    local file="$1"
+    local val="$2"
+
+    if [[ ! -f "$file" ]]; then
+        echo "Error: Device node not found: $file" >&2
+        return 1
+    fi
+
+    if [[ -w "$file" ]]; then
+        echo "$val" > "$file"
+    else
+        # Fall back to sudo if not running as root and file is not user-writable
+        if command -v sudo >/dev/null 2>&1; then
+            echo "$val" | sudo tee "$file" >/dev/null
+        else
+            echo "Error: Cannot write to $file (permission denied and sudo not found)" >&2
+            return 1
+        fi
+    fi
+}
+
+resolve_color() {
+    if [[ $# -eq 1 ]]; then
+        local name="${1,,}"
+        if [[ -n "${PRESETS[$name]:-}" ]]; then
+            echo "${PRESETS[$name]}"
+            return 0
+        fi
+        echo "Error: Unknown preset '$1'. Run 'omen-rgb' for a list." >&2
+        return 1
+    elif [[ $# -eq 3 ]]; then
+        echo "$1 $2 $3"
+        return 0
+    else
+        echo "Error: Color must be a preset name or three numbers: R G B (0-255)" >&2
+        return 1
+    fi
+}
+
+set_zone_color() {
+    local zone="$1"
+    shift
+    local rgb
+    rgb="$(resolve_color "$@")"
+    local path="$LED_DIR/hp::kbd_zoned_backlight-$zone"
+
+    write_val "$path/multi_intensity" "$rgb"
+    write_val "$path/brightness" "$DEFAULT_BRIGHTNESS"
+}
+
+set_all_color() {
+    local rgb
+    rgb="$(resolve_color "$@")"
+
+    for z in "${ZONES[@]}"; do
+        local path="$LED_DIR/hp::kbd_zoned_backlight-$z"
+        if [[ -d "$path" ]]; then
+            write_val "$path/multi_intensity" "$rgb"
+            write_val "$path/brightness" "$DEFAULT_BRIGHTNESS"
+        fi
+    done
+}
+
+set_all_brightness() {
+    local val="$1"
+    for z in "${ZONES[@]}"; do
+        local path="$LED_DIR/hp::kbd_zoned_backlight-$z"
+        if [[ -d "$path" ]]; then
+            write_val "$path/brightness" "$val"
+        fi
+    done
+}
+
+show_status() {
+    echo "=== HP OMEN Keyboard Backlight Status ==="
+    for z in "${ZONES[@]}"; do
+        local path="$LED_DIR/hp::kbd_zoned_backlight-$z"
+        if [[ -d "$path" ]]; then
+            local bright multi
+            bright="$(cat "$path/brightness" 2>/dev/null || echo "N/A")"
+            multi="$(cat "$path/multi_intensity" 2>/dev/null || echo "N/A")"
+            printf "  Zone [%-6s]: Brightness = %-3s | Color (R G B) = %s\n" "$z" "$bright" "$multi"
+        else
+            printf "  Zone [%-6s]: Not detected\n" "$z"
+        fi
+    done
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 0
+fi
+
+cmd="$1"
+shift
+
+case "$cmd" in
+    status)
+        show_status
+        ;;
+    on)
+        color="${1:-white}"
+        set_all_color "$color"
+        echo "Backlight turned ON ($color)."
+        ;;
+    off)
+        set_all_brightness "0"
+        echo "Backlight turned OFF."
+        ;;
+    color)
+        if [[ $# -lt 1 ]]; then
+            echo "Error: Missing color argument." >&2
+            usage
+            exit 1
+        fi
+        set_all_color "$@"
+        echo "All zones updated."
+        ;;
+    zone)
+        if [[ $# -lt 2 ]]; then
+            echo "Error: Missing zone or color argument." >&2
+            usage
+            exit 1
+        fi
+        zone="$1"
+        shift
+        set_zone_color "$zone" "$@"
+        echo "Zone '$zone' updated."
+        ;;
+    brightness)
+        val="${1:-$DEFAULT_BRIGHTNESS}"
+        set_all_brightness "$val"
+        echo "Brightness set to $val."
+        ;;
+    gamer)
+        set_zone_color "wasd" "red"
+        set_zone_color "left" "cyan"
+        set_zone_color "center" "cyan"
+        set_zone_color "right" "cyan"
+        echo "Gamer preset applied (WASD = red, other zones = cyan)."
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    *)
+        echo "Error: Unknown command '$cmd'" >&2
+        usage
+        exit 1
+        ;;
+esac
