@@ -60,6 +60,9 @@ myLinux() {
         command myLinux -h
     elif [ "$1" = "cd" ]; then
         cd "$HOME/Documents/GitHub/myLinux"
+    elif [ "$1" = "sync" ] || [ "$1" = "update" ]; then
+        command myLinux "$@"
+        source "$HOME/.bashrc"
     else
         command myLinux "$@"
     fi

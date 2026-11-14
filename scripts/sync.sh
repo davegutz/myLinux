@@ -87,5 +87,10 @@ fi
 
 echo -e "${GREEN}========================================================${NC}"
 echo -e "${GREEN}   Configurations synchronized successfully!            ${NC}"
-echo -e "${GREEN}   Run 'reload' or 'source ~/.bashrc' or restart terminal${NC}"
 echo -e "${GREEN}========================================================${NC}"
+
+# Auto-refresh interactive terminal session so updated aliases/settings apply immediately
+if [ -t 0 ] && [ -n "${BASH_VERSION:-}" ]; then
+    echo -e "${GREEN}==> Refreshing terminal session with updated configurations...${NC}"
+    exec bash
+fi
