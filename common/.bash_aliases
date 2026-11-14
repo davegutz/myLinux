@@ -54,6 +54,18 @@ alias cdsoc='cd ~/Documents/GitHub/mySOC'
 alias mylinux-sync='~/Documents/GitHub/myLinux/scripts/sync.sh'
 alias mylinux-update='~/Documents/GitHub/myLinux/scripts/sync.sh --update'
 
+# --- myLinux & Dotfiles CLI Helper ---
+myLinux() {
+    if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        command myLinux -h
+    elif [ "$1" = "cd" ]; then
+        cd "$HOME/Documents/GitHub/myLinux"
+    else
+        command myLinux "$@"
+    fi
+}
+alias mylinux='myLinux'
+
 # --- Security Scanner & Audit ---
 alias sys-security-scan='sys-security-scan'
 alias sec-scan='sys-security-scan'

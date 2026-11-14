@@ -12,6 +12,8 @@ usage() {
     echo "  status [args]         Show git status of the myLinux repository (use -r to fetch first)"
     echo "  check                 Check GitHub to see if remote updates are available"
     echo "  diff                  Show unstaged changes in the myLinux repository"
+    echo "  camera                Install and configure security camera NVR (motionEye)"
+    echo "  camera-review         Browse recorded camera captures (feh / vlc)"
     echo "  autostart [DE]        Manage autostart packages (cosmic | gnome | plasma | detect | status)"
     echo "  daemon [action]       Manage rclone daily backup daemon (status | enable | disable | run | logs)"
     echo "  security [action]     Security scanner & audit (scan | enable | disable | timer | logs)"
@@ -26,6 +28,17 @@ case "$1" in
         ;;
     update)
         "$REPO_DIR/scripts/sync.sh" --update
+        ;;
+    camera|install-camera|secure-cam)
+        "$REPO_DIR/scripts/install_secure_cam.sh"
+        ;;
+    camera-review)
+        shift
+        camera-review "$@"
+        ;;
+    camera-timelapse)
+        shift
+        camera-timelapse "$@"
         ;;
     status)
         if [[ "${2:-}" == "-r" || "${2:-}" == "--remote" ]]; then

@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# myLinux - Master CLI and reference utility for the myLinux configuration repository
+# Supports updating dotfiles, installing security camera, system maintenance, and diagnostics.
+
+REPO_DIR="$HOME/Documents/GitHub/myLinux"
+
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+usage() {
+    echo -e "${BLUE}${BOLD}===================================================================${NC}"
+    echo -e "${BLUE}${BOLD}   myLinux System Configuration & Environment Manager              ${NC}"
+    echo -e "${BLUE}${BOLD}   Repository: ${CYAN}$REPO_DIR${NC}"
+    echo -e "${BLUE}${BOLD}===================================================================${NC}"
+    echo -e "${BOLD}Usage:${NC} myLinux [command] [options]"
+    echo ""
+    echo -e "${YELLOW}${BOLD}Dotfiles & System Update Commands:${NC}"
+    echo -e "  ${GREEN}myLinux sync${NC}                  Pull latest dotfiles from GitHub and re-stow configs"
+    echo -e "  ${GREEN}myLinux update${NC}                Pull dotfiles, re-stow, and run full system package upgrades"
+    echo -e "  ${GREEN}myLinux check${NC}                 Check GitHub to see if remote updates are available"
+    echo -e "  ${GREEN}myLinux status [-r]${NC}           Show git status of myLinux repo (use -r to fetch first)"
+    echo -e "  ${GREEN}myLinux diff${NC}                  Show unstaged local changes in myLinux"
+    echo ""
+    echo -e "${YELLOW}${BOLD}Security Camera (motion + motionEye):${NC}"
+    echo -e "  ${GREEN}myLinux camera${NC}                Run automated installer for security camera NVR"
+    echo -e "  ${GREEN}myLinux camera-review${NC}         Open interactive thumbnail sheet of today's captures"
+    echo -e "  ${GREEN}myLinux camera-review -s${NC}      Play captures as an auto-zoomed 2 fps slideshow"
+    echo -e "  ${GREEN}myLinux camera-review -v${NC}      Queue and play today's .mp4 video recordings in VLC"
+    echo -e "  ${GREEN}myLinux camera-timelapse${NC}      Generate daily timelapse video from JPG snapshots"
+    echo ""
+    echo -e "${YELLOW}${BOLD}System Maintenance & Performance:${NC}"
+    echo -e "  ${GREEN}myLinux clean${NC}                 Reclaim disk space, purge old kernels/snaps, and fstrim"
+    echo -e "  ${GREEN}myLinux tune-io${NC}               Optimize systemd-homed LUKS eMMC/SSD I/O performance"
+    echo -e "  ${GREEN}myLinux security [scan|logs]${NC}  Run system security scan and audit"
+    echo -e "  ${GREEN}myLinux fonts${NC}                 Install and verify JetBrains Mono Nerd Font"
+    echo -e "  ${GREEN}myLinux theme${NC}                 Apply unified dark appearance (GTK, KDE Plasma, LXQt)"
+    echo -e "  ${GREEN}myLinux autostart [DE]${NC}        Manage autostart package (plasma|cosmic|gnome|detect)"
+    echo -e "  ${GREEN}myLinux daemon [status|run]${NC}   Manage Rclone daily backup timer & logs"
+    echo -e "  ${GREEN}myLinux cd${NC}                    Print path to repository (run: ${CYAN}cd \$(myLinux cd)${NC})"
+    echo ""
+    echo -e "${YELLOW}${BOLD}Convenient Aliases & Shortcuts:${NC}"
+    echo -e "  ${CYAN}mylinux-sync${NC}                  Direct shortcut to pull and re-stow dotfiles"
+    echo -e "  ${CYAN}mylinux-update${NC}                Direct shortcut to pull dotfiles and upgrade packages"
+    echo -e "  ${CYAN}dotfiles${NC}                      Alias for the myLinux management utility"
+    echo -e "  ${CYAN}reload${NC}                        Reload bash environment (source ~/.bashrc)"
+    echo -e "${BLUE}===================================================================${NC}"
+}
+
+case "${1:-}" in
+    sync)
+        "$REPO_DIR/scripts/sync.sh"
+        ;;
+    update)
+        "$REPO_DIR/scripts/sync.sh" --update
+        ;;
+    camera|install-camera|secure-cam)
+        "$REPO_DIR/scripts/install_secure_cam.sh"
+        ;;
+    camera-review)
+        shift
+        camera-review "$@"
+        ;;
+    camera-timelapse)
+        shift
+        camera-timelapse "$@"
+        ;;
+    clean)
+        "$REPO_DIR/scripts/clean_root.sh"
+        ;;
+    tune-io|homed)
+        shift
+        "$REPO_DIR/scripts/tune_homed_encryption.sh" "$@"
+        ;;
+    fonts)
+        "$REPO_DIR/scripts/install_fonts.sh"
+        ;;
+    theme|appearance)
+        "$REPO_DIR/scripts/setup_appearance.sh"
+        ;;
+    status)
+        shift
+        dotfiles status "$@"
+        ;;
+    check)
+        dotfiles check
+        ;;
+    diff)
+        dotfiles diff
+        ;;
+    autostart)
+        shift
+        dotfiles autostart "$@"
+        ;;
+    daemon)
+        shift
+        dotfiles daemon "$@"
+        ;;
+    security)
+        shift
+        dotfiles security "$@"
+        ;;
+    finance)
+        shift
+        dotfiles finance "$@"
+        ;;
+    cd)
+        echo "$REPO_DIR"
+        ;;
+    -h|--help|help|"")
+        usage
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $1${NC}"
+        echo ""
+        usage
+        exit 1
+        ;;
+esac
