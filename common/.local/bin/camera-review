@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# camera-review - Quickly browse motioneye or standalone camera captures
+# Usage:
+#   camera-review                # Open today's captures in feh thumbnail grid
+#   camera-review --slideshow    # Play slideshow/flipbook at 2 fps
+#   camera-review --vlc          # Play today's video clips in VLC
+#   camera-review --dir <path>   # Target a specific captures directory
+
+set -e
+
+TODAY=$(date +%Y-%m-%d)
+TARGET_DIR=""
+
+if [ "$1" = "--dir" ] && [ -n "$2" ]; then
+    TARGET_DIR="$2"
+    shift 2
+elif [ -d "/var/lib/motioneye/Camera1/$TODAY" ]; then
+    TARGET_DIR="/var/lib/motioneye/Camera1/$TODAY"
+elif [ -d "/var/lib/motioneye/Camera1" ]; then
+    TARGET_DIR="/var/lib/motioneye/Camera1"
+elif [ -d "$HOME/camera_captures" ]; then
+    TARGET_DIR="$HOME/camera_captures"
+elif [ -d "/var/lib/motion" ]; then
+    TARGET_DIR="/var/lib/motion"
+else
+    echo "No camera captures directory found."
+    exit 1
+fi
+
+MODE="${1:-thumbs}"
+
+case "$MODE" in
+    --slideshow|-s)
+        echo "Launching slideshow for: $TARGET_DIR"
+        feh -d -F -D 0.5 --auto-zoom "$TARGET_DIR"
+        ;;
+    --vlc|-v)
+        echo "Launching VLC for: $TARGET_DIR"
+        vlc "$TARGET_DIR"/*.mp4 "$TARGET_DIR"/*.mkv 2>/dev/null || echo "VLC exited or no video files found."
+        ;;
+    --thumbs|-t|thumbs|*)
+        echo "Launching thumbnail browser for: $TARGET_DIR"
+        feh -t -E 180 -y 120 -W 1200 "$TARGET_DIR"
+        ;;
+esac

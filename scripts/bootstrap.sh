@@ -153,6 +153,12 @@ echo -e "\n${GREEN}[Step 4/5] Installing and verifying fonts...${NC}"
 echo -e "\n${GREEN}[Step 5/5] Aligning desktop appearance and theme...${NC}"
 "$DOTFILES_DIR/scripts/setup_appearance.sh"
 
+# Optional: Security camera NVR installation (if requested via argument)
+if [[ "$*" == *"--with-secure-cam"* ]] || [[ "$*" == *"--camera"* ]]; then
+    echo -e "\n${GREEN}[Optional] Installing security camera NVR (motion + motionEye)...${NC}"
+    "$DOTFILES_DIR/scripts/install_secure_cam.sh"
+fi
+
 echo -e "\n${GREEN}====================================================${NC}"
 echo -e "${GREEN}   System configurations aligned successfully!       ${NC}"
 echo -e "${GREEN}====================================================${NC}"
@@ -163,3 +169,5 @@ echo -e "  2. Launch Alacritty to test the unified terminal:"
 echo -e "     ${YELLOW}alacritty &${NC}"
 echo -e "  3. To synchronize updates in the future, run:"
 echo -e "     ${YELLOW}mylinux-sync${NC} or ${YELLOW}dotfiles sync${NC}"
+echo -e "  4. To set up the Security Camera NVR (motion + motionEye):"
+echo -e "     ${YELLOW}./scripts/install_secure_cam.sh${NC}"

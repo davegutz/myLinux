@@ -31,6 +31,14 @@ if [ -d "$MYCOMPUTER_DIR" ]; then
             chmod +x "$HOME/bin/suspend_until"
         fi
     fi
+
+    # Check for security camera documentation & config
+    if [ -f "$MYCOMPUTER_DIR/INSTALL_secure_cam.md" ]; then
+        echo -e "${GREEN}✓ Found INSTALL_secure_cam.md in myComputer.${NC}"
+    fi
+    if [ -f "$MYCOMPUTER_DIR/motioneye-config.tar.gz" ]; then
+        echo -e "${GREEN}✓ Found motioneye-config.tar.gz in myComputer.${NC}"
+    fi
 else
     echo -e "${YELLOW}Warning: myComputer directory not found at $MYCOMPUTER_DIR.${NC}"
 fi

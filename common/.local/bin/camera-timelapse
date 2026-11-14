@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# camera-timelapse - Generate daily timelapse video from camera JPEG snapshots
+# Usage: camera-timelapse [source_dir] [output_file]
+
+set -e
+
+SRC_DIR="${1:-$HOME/camera_captures}"
+OUT_FILE="${2:-$SRC_DIR/review_$(date +%Y%m%d).mp4}"
+
+if [ ! -d "$SRC_DIR" ]; then
+    echo "Source directory '$SRC_DIR' not found."
+    exit 1
+fi
+
+shopt -s nullglob
+JPG_FILES=("$SRC_DIR"/*.jpg)
+if [ ${#JPG_FILES[@]} -eq 0 ]; then
+    echo "No .jpg files found in '$SRC_DIR'."
+    exit 1
+fi
+
+echo "Creating timelapse video from ${#JPG_FILES[@]} images..."
+ffmpeg -y -framerate 10 -pattern_type glob -i "$SRC_DIR/*.jpg" -c:v libx264 -pix_fmt yuv420p "$OUT_FILE"
+
+echo "Timelapse created: $OUT_FILE"
