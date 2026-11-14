@@ -168,6 +168,12 @@ echo -e "     ${YELLOW}reload${NC} (or ${YELLOW}source ~/.bashrc${NC})"
 echo -e "  2. Launch Alacritty to test the unified terminal:"
 echo -e "     ${YELLOW}alacritty &${NC}"
 echo -e "  3. To synchronize updates in the future, run:"
-echo -e "     ${YELLOW}mylinux-sync${NC} or ${YELLOW}dotfiles sync${NC}"
+echo -e "     ${YELLOW}myLinux sync${NC} (or ${YELLOW}myLinux -h${NC} for help)"
 echo -e "  4. To set up the Security Camera NVR (motion + motionEye):"
-echo -e "     ${YELLOW}./scripts/install_secure_cam.sh${NC}"
+echo -e "     ${YELLOW}./scripts/install_secure_cam.sh${NC} (or ${YELLOW}myLinux camera${NC})"
+
+# Auto-refresh interactive terminal session so all new aliases and commands work immediately
+if [ -t 0 ] && [ -n "${BASH_VERSION:-}" ]; then
+    echo -e "\n${GREEN}==> Refreshing terminal session with all new commands active...${NC}"
+    exec bash
+fi

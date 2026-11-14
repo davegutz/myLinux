@@ -2,6 +2,12 @@
 
 A centralized dotfiles and configuration manager designed to keep diverse Linux distributions—specifically **CachyOS** (Arch-based / COSMIC / KDE) and **Lubuntu / Ubuntu** (Debian-based / LXQt / KDE)—visually identical and functionally aligned.
 
+> [!TIP]
+> **Quick Onboarding & Installation Guide:** See **[INSTALL.md](INSTALL.md)**.
+> * **New machine setup:** `cd ~/Documents/GitHub/myLinux && ./install.sh`
+> * **Sync existing machine:** `myLinux sync`
+> * **Master command reference:** `myLinux -h`
+
 ---
 
 ## ⚡ Quickstart
@@ -15,11 +21,8 @@ mkdir -p ~/Documents/GitHub && cd ~/Documents/GitHub
 git clone https://github.com/davegutz/myLinux.git   # or: git clone git@github.com:davegutz/myLinux.git
 cd myLinux
 
-# 2. Run the automated bootstrap manager:
-./scripts/bootstrap.sh
-
-# 3. Reload your terminal shell:
-reload                # or: source ~/.bashrc
+# 2. Run the installer:
+./install.sh
 ```
 
 ---
