@@ -24,7 +24,7 @@ if [ "$EUID" -ne 0 ] && ! sudo -v >/dev/null 2>&1; then
 fi
 
 # 1. Install System Dependencies
-echo -e "\n${GREEN}[Step 1/6] Installing system dependencies (motion, ffmpeg, v4l-utils)...${NC}"
+echo -e "\n${GREEN}[Step 1/7] Installing system dependencies (motion, ffmpeg, v4l-utils)...${NC}"
 
 if [ -f /etc/debian_version ]; then
     DEBIAN_PKGS="motion ffmpeg v4l-utils feh python3-venv python3-pip python3-pil ca-certificates curl"
@@ -63,7 +63,7 @@ else
 fi
 
 # 2. Setup motion system user, groups, and runtime directories
-echo -e "\n${GREEN}[Step 2/6] Configuring service users and runtime directories...${NC}"
+echo -e "\n${GREEN}[Step 2/7] Configuring service users and runtime directories...${NC}"
 
 # Ensure motion user/group exists
 if ! id -u motion >/dev/null 2>&1; then
@@ -83,7 +83,7 @@ sudo chown -R motion:motion /etc/motioneye /var/lib/motioneye /var/log/motioneye
 sudo chmod 755 /var/lib/motioneye /var/lib/motioneye/Camera1
 
 # 3. Setup motionEye virtual environment
-echo -e "\n${GREEN}[Step 3/6] Setting up motionEye in dedicated virtual environment (/opt/motioneye)...${NC}"
+echo -e "\n${GREEN}[Step 3/7] Setting up motionEye in dedicated virtual environment (/opt/motioneye)...${NC}"
 
 if [ ! -x "/opt/motioneye/bin/meyectl" ]; then
     echo "Creating Python virtual environment in /opt/motioneye..."
@@ -100,7 +100,7 @@ if [ ! -L "/usr/local/bin/meyectl" ]; then
 fi
 
 # 4. Deploy motionEye configuration & systemd service
-echo -e "\n${GREEN}[Step 4/6] Configuring motionEye and motion settings...${NC}"
+echo -e "\n${GREEN}[Step 4/7] Configuring motionEye and motion settings...${NC}"
 
 # Deploy base motioneye.conf if not present
 if [ ! -f "/etc/motioneye/motioneye.conf" ]; then
@@ -159,7 +159,7 @@ EOF
 fi
 
 # 5. User-level local captures and standalone motion setup
-echo -e "\n${GREEN}[Step 5/6] Creating user capture directories and local configs...${NC}"
+echo -e "\n${GREEN}[Step 5/7] Creating user capture directories and local configs...${NC}"
 
 USER_HOME=$(eval echo "~$TARGET_USER")
 mkdir -p "$USER_HOME/camera_captures"
@@ -203,8 +203,32 @@ mask_file $USER_HOME/.local/mask.pgm
 EOF
 fi
 
-# 6. Firewall & Service Activation
-echo -e "\n${GREEN}[Step 6/6] Configuring firewall and activating motionEye service...${NC}"
+# 6. Ensure Tailscale is installed and connected
+echo -e "\n${GREEN}[Step 6/7] Ensuring Tailscale mesh VPN is installed and configured...${NC}"
+
+if ! command -v tailscale >/dev/null 2>&1; then
+    echo "Tailscale not detected. Installing Tailscale via official installer..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+fi
+
+# Ensure tailscaled service is enabled and started
+sudo systemctl enable tailscaled
+sudo systemctl start tailscaled
+
+# Check if authenticated into a tailnet
+ACTUAL_USER="${SUDO_USER:-$USER}"
+if ! tailscale ip -4 >/dev/null 2>&1; then
+    echo -e "${YELLOW}Tailscale is installed but not connected to your account.${NC}"
+    if [ -t 0 ]; then
+        echo -e "Starting Tailscale login. Open the URL in your browser to sign in (e.g. davegutz2006@gmail.com):"
+        sudo tailscale up --operator="$ACTUAL_USER" || true
+    else
+        echo -e "${YELLOW}Non-interactive terminal detected. Run 'sudo tailscale up --operator=$ACTUAL_USER' to log in.${NC}"
+    fi
+fi
+
+# 7. Firewall & Service Activation
+echo -e "\n${GREEN}[Step 7/7] Configuring firewall and activating motionEye service...${NC}"
 
 # Open port 8765 if ufw is active
 if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -qw "active"; then

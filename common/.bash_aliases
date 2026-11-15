@@ -72,3 +72,7 @@ alias mylinux='myLinux'
 # --- Security Scanner & Audit ---
 alias sys-security-scan='sys-security-scan'
 alias sec-scan='sys-security-scan'
+
+# --- AI & Assistant CLI ---
+alias ai='agy --dangerously-skip-permissions'
+

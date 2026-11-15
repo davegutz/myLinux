@@ -698,8 +698,9 @@ Run the installer at any time:
 2. **Dedicated Environment**: Isolates motionEye inside a dedicated `/opt/motioneye` virtual environment and exposes `/usr/local/bin/meyectl`.
 3. **Service Management**: Creates and enables `/etc/systemd/system/motioneye.service` running as the system `motion` user, granting group access to your user.
 4. **Configuration Restore & Codec Hardening**: Restores `motioneye-config.tar.gz` from `myComputer` if available, and guarantees software `mp4` (H.264) encoding is set (preventing hardware `v4l2m2m`/`omx` encoder failures on x86_64 machines).
-5. **Firewall Setup**: Automatically opens port `8765/tcp` in `ufw` if the firewall is active.
-6. **Local Capture Fallbacks**: Pre-configures `~/camera_captures`, generates the motion privacy mask (`~/.local/mask.pgm`), and writes `~/.local/secure_cam.conf`.
+5. **Local Capture Fallbacks**: Pre-configures `~/camera_captures`, generates the motion privacy mask (`~/.local/mask.pgm`), and writes `~/.local/secure_cam.conf`.
+6. **Tailscale Remote Mesh VPN**: Installs Tailscale via the official installer (`curl -fsSL https://tailscale.com/install.sh | sh`), activates `tailscaled`, and connects the node for remote access.
+7. **Firewall Setup**: Automatically opens port `8765/tcp` in `ufw` if the firewall is active.
 
 ### Accessing the Web Dashboard
 * **Local LAN**: `http://localhost:8765` or `http://<machine-ip>:8765`
