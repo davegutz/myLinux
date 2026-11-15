@@ -3,7 +3,8 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+DOTFILES_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
