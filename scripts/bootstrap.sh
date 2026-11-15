@@ -20,7 +20,7 @@ echo -e "\n${GREEN}[Step 1/5] Detecting distribution and installing core tools..
 
 if [ -f /etc/arch-release ]; then
     echo "Detected Arch-based system (CachyOS)."
-    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp rclone fuse3 libfido2"
+    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp rclone fuse3 libfido2 cryptomator"
     # Check if packages are missing before running pacman
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
@@ -58,6 +58,18 @@ elif [ -f /etc/debian_version ]; then
         echo "Core packages already installed."
     fi
 
+    # Ensure Cryptomator is installed on Debian/Ubuntu for financial vault decryption
+    if ! command -v cryptomator >/dev/null 2>&1 && ! dpkg -s cryptomator >/dev/null 2>&1; then
+        echo "Configuring and installing Cryptomator..."
+        if command -v add-apt-repository >/dev/null 2>&1; then
+            sudo add-apt-repository -y ppa:sebastian-stenzel/cryptomator 2>/dev/null || true
+            sudo apt-get update 2>/dev/null || true
+            sudo apt-get install -y cryptomator 2>/dev/null || true
+        elif command -v flatpak >/dev/null 2>&1; then
+            flatpak install -y flathub org.cryptomator.Cryptomator 2>/dev/null || true
+        fi
+    fi
+
     # Ensure Snap Firefox has u2f-devices access for YubiKey / FIDO2 WebAuthn
     if command -v snap >/dev/null 2>&1 && snap list firefox >/dev/null 2>&1; then
         sudo snap connect firefox:u2f-devices 2>/dev/null || true
@@ -89,6 +101,7 @@ mkdir -p "$HOME/.config/gnucash"
 mkdir -p "$HOME/.local/share/applications"
 mkdir -p "$HOME/.local/share/fonts"
 mkdir -p "$HOME/.local/share/gnucash/books"
+mkdir -p "$HOME/.local/share/Cryptomator/mnt"
 
 # Deploy configurations via GNU Stow
 echo "Symlinking common configurations via GNU Stow..."
@@ -171,6 +184,12 @@ echo -e "  3. To synchronize updates in the future, run:"
 echo -e "     ${YELLOW}myLinux sync${NC} (or ${YELLOW}myLinux -h${NC} for help)"
 echo -e "  4. To set up the Security Camera NVR (motion + motionEye):"
 echo -e "     ${YELLOW}./scripts/install_secure_cam.sh${NC} (or ${YELLOW}myLinux camera${NC})"
+echo -e "  5. Set up Cryptomator FinanceVault (GnuCash Joint):"
+echo -e "     • Open Cryptomator: ${YELLOW}cryptomator &${NC}"
+echo -e "     • Add existing vault: select ${YELLOW}~/gdrive/FinanceVault${NC}"
+echo -e "     • Unlock vault with your passphrase (mounts to ~/.local/share/Cryptomator/mnt/FinanceVault)"
+echo -e "     • (Tip) In Cryptomator Vault Options, enable 'Save Password' and 'Unlock automatically when Cryptomator starts'"
+echo -e "     • Launch GnuCash (Joint) from desktop launcher or terminal: ${YELLOW}gnucash-refresh${NC}"
 
 # Auto-refresh interactive terminal session so all new aliases and commands work immediately
 if [ -t 0 ] && [ -n "${BASH_VERSION:-}" ]; then

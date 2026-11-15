@@ -195,17 +195,31 @@ case "$1" in
                     rmdir "$vault_mount" 2>/dev/null || true
                     echo "Unmounted $vault_mount"
                 fi
-                if pgrep -fi "cryptomator" >/dev/null 2>&1; then
-                    flatpak kill org.cryptomator.Cryptomator 2>/dev/null || pkill -TERM -f cryptomator 2>/dev/null || true
+                if pgrep -x cryptomator >/dev/null 2>&1 || pgrep -f "^/usr/bin/cryptomator|^/opt/cryptomator|org\.cryptomator\.Cryptomator" >/dev/null 2>&1; then
+                    flatpak kill org.cryptomator.Cryptomator 2>/dev/null || pkill -TERM -x cryptomator 2>/dev/null || true
                     echo "Terminated Cryptomator application."
                 fi
                 sed -i '/FinanceVault/d' "$HOME/.config/gtk-3.0/bookmarks" 2>/dev/null || true
-                if mountpoint -q "/media/veracrypt1" 2>/dev/null; then
-                    sync -f /media/veracrypt1 2>/dev/null || sync
-                    veracrypt -d /media/veracrypt1 2>/dev/null || true
-                    echo "Dismounted VeraCrypt USB volume."
+                veracrypt_mount=""
+                for cand in "/run/media/veracrypt1" "/media/veracrypt1"; do
+                    if mountpoint -q "$cand" 2>/dev/null; then
+                        veracrypt_mount="$cand"
+                        break
+                    fi
+                done
+                if [ -z "$veracrypt_mount" ]; then
+                    veracrypt_mount="$(awk '$1 ~ /\/dev\/mapper\/veracrypt/ {print $2; exit}' /proc/mounts 2>/dev/null)"
+                fi
+                if [ -n "$veracrypt_mount" ] && mountpoint -q "$veracrypt_mount" 2>/dev/null; then
+                    sync -f "$veracrypt_mount" 2>/dev/null || sync
+                    veracrypt -d "$veracrypt_mount" 2>/dev/null || true
+                    echo "Dismounted VeraCrypt USB volume at $veracrypt_mount."
                 fi
                 echo "All financial vaults are locked."
+                ;;
+            unlock)
+                echo "=== Releasing Finance Session & Stale GnuCash Locks ==="
+                gnucash-refresh --unlock
                 ;;
             logs)
                 echo "=== Sleep Auto-Lock Logs (~/.local/state/security/sleep-lock.log) ==="
@@ -218,8 +232,36 @@ case "$1" in
                     tail -n 25 "$HOME/.local/state/rclone/usb-backup.log"
                 fi
                 ;;
+            setup|install)
+                echo "=== Setting up Financial Vault (Cryptomator) ==="
+                if ! [ -x /usr/bin/cryptomator ] && ! flatpak info org.cryptomator.Cryptomator >/dev/null 2>&1; then
+                    echo "Cryptomator is not installed. Installing..."
+                    if [ -f /etc/arch-release ]; then
+                        sudo pacman -S --needed --noconfirm cryptomator
+                    elif [ -f /etc/debian_version ]; then
+                        if command -v add-apt-repository >/dev/null 2>&1; then
+                            sudo add-apt-repository -y ppa:sebastian-stenzel/cryptomator
+                            sudo apt-get update
+                            sudo apt-get install -y cryptomator
+                        elif command -v flatpak >/dev/null 2>&1; then
+                            flatpak install -y flathub org.cryptomator.Cryptomator
+                        fi
+                    fi
+                else
+                    echo "Cryptomator is already installed."
+                fi
+                mkdir -p "$HOME/.local/share/Cryptomator/mnt"
+                echo "Launching Cryptomator GUI..."
+                cryptomator &
+                echo ""
+                echo "Next steps in Cryptomator:"
+                echo "  1. Click '+' -> 'Open Existing Vault'"
+                echo "  2. Select: $HOME/gdrive/FinanceVault"
+                echo "  3. Enter passphrase to unlock (mounts at ~/.local/share/Cryptomator/mnt/FinanceVault)"
+                echo "  4. (Tip) In Vault Options enable 'Save Password' & 'Unlock automatically'"
+                ;;
             *)
-                echo "Usage: dotfiles finance [status|backup|lock|logs]"
+                echo "Usage: dotfiles finance [status|setup|backup|lock|unlock|logs]"
                 exit 1
                 ;;
         esac

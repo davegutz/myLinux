@@ -37,6 +37,7 @@ mkdir -p "$HOME/bin"
 mkdir -p "$HOME/Desktop"
 mkdir -p "$HOME/.config/gnucash"
 mkdir -p "$HOME/.local/share/applications"
+mkdir -p "$HOME/.local/share/Cryptomator/mnt"
 
 # 3. Re-stow configurations
 echo -e "${GREEN}==> Re-stowing common configurations into $HOME...${NC}"

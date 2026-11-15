@@ -32,11 +32,27 @@ def lock_financial_vaults():
 
     # 1. Check & cleanly unmount VeraCrypt if mounted
     try:
-        res = subprocess.run(["mountpoint", "-q", "/media/veracrypt1"], check=False)
-        if res.returncode == 0:
-            log("VeraCrypt USB volume detected at /media/veracrypt1. Flushing & dismounting...")
-            subprocess.run(["sync", "-f", "/media/veracrypt1"], check=False)
-            subprocess.run(["veracrypt", "-d", "/media/veracrypt1"], check=False)
+        veracrypt_mount = None
+        for cand in ["/run/media/veracrypt1", "/media/veracrypt1"]:
+            if subprocess.run(["mountpoint", "-q", cand], check=False).returncode == 0:
+                veracrypt_mount = cand
+                break
+        if not veracrypt_mount and os.path.exists("/proc/mounts"):
+            try:
+                with open("/proc/mounts", "r") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) >= 2 and "/dev/mapper/veracrypt" in parts[0]:
+                            if subprocess.run(["mountpoint", "-q", parts[1]], check=False).returncode == 0:
+                                veracrypt_mount = parts[1]
+                                break
+            except Exception:
+                pass
+
+        if veracrypt_mount:
+            log(f"VeraCrypt USB volume detected at {veracrypt_mount}. Flushing & dismounting...")
+            subprocess.run(["sync", "-f", veracrypt_mount], check=False)
+            subprocess.run(["veracrypt", "-d", veracrypt_mount], check=False)
             log("VeraCrypt volume dismounted.")
     except Exception as e:
         log(f"Error dismounting VeraCrypt: {e}")
@@ -59,11 +75,13 @@ def lock_financial_vaults():
 
     # 3. Terminate Cryptomator app to wipe encryption keys from RAM
     try:
-        res = subprocess.run(["pgrep", "-fi", "cryptomator"], capture_output=True, check=False)
+        res = subprocess.run(["pgrep", "-x", "cryptomator"], capture_output=True, check=False)
+        if res.returncode != 0:
+            res = subprocess.run(["pgrep", "-f", "^/usr/bin/cryptomator|^/opt/cryptomator|org\\.cryptomator\\.Cryptomator"], capture_output=True, check=False)
         if res.returncode == 0:
             log("Terminating Cryptomator app to purge volatile encryption keys from RAM...")
             subprocess.run(["flatpak", "kill", "org.cryptomator.Cryptomator"], check=False)
-            subprocess.run(["pkill", "-TERM", "-f", "cryptomator"], check=False)
+            subprocess.run(["pkill", "-TERM", "-x", "cryptomator"], check=False)
             log("Cryptomator terminated.")
     except Exception as e:
         log(f"Error terminating Cryptomator: {e}")

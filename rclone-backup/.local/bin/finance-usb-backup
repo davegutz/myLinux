@@ -17,6 +17,19 @@ if [ -f "$CONF_LOCAL" ]; then
     source "$CONF_LOCAL"
 fi
 
+# Auto-detect active mount if configured path is not mounted
+if ! mountpoint -q "${USB_MOUNT:-/media/veracrypt1}" 2>/dev/null; then
+    for cand in "/run/media/veracrypt1" "/media/veracrypt1"; do
+        if mountpoint -q "$cand" 2>/dev/null; then
+            USB_MOUNT="$cand"
+            CANARY_FILE="$USB_MOUNT/.veracrypt_finance_canary"
+            DEST_DIR="$USB_MOUNT/FinanceBackup"
+            ARCHIVE_BASE="$USB_MOUNT/Archive"
+            break
+        fi
+    done
+fi
+
 # Defaults if not defined
 USB_MOUNT="${USB_MOUNT:-/media/veracrypt1}"
 CANARY_FILE="${CANARY_FILE:-$USB_MOUNT/.veracrypt_finance_canary}"
@@ -86,6 +99,13 @@ echo "==========================================================" | tee -a "$LOG
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting financial backup to VeraCrypt USB..." | tee -a "$LOG_FILE"
 
 # 3. Verify VeraCrypt Mount & Canary Marker
+if [ ! -f "$CANARY_FILE" ] && mountpoint -q "$USB_MOUNT" 2>/dev/null; then
+    # Auto-initialize canary marker on verified finance USB stick
+    if [ -d "$USB_MOUNT/Gutz_joint_gnucash" ] || [ -d "$USB_MOUNT/FinanceBackup" ] || [ -d "$USB_MOUNT/Budget" ]; then
+        touch "$CANARY_FILE" 2>/dev/null || true
+    fi
+fi
+
 if [ ! -f "$CANARY_FILE" ]; then
     MSG="VeraCrypt USB volume is not mounted (canary file missing: $CANARY_FILE). Aborting."
     echo "[ERROR] $MSG" | tee -a "$LOG_FILE"
