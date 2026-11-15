@@ -706,6 +706,22 @@ Run the installer at any time:
 * **Local LAN**: `http://localhost:8765` or `http://<machine-ip>:8765`
 * **Tailscale**: `http://<tailscale-ip>:8765` (or `http://venus-littleguy:8765`)
 
+### Mobile Setup (Phone via Tailscale)
+1. Install Tailscale from Google Play Store or Apple App Store.
+2. Sign in as the designated Tailscale user: `davegutz2006@gmail.com`.
+3. Connect Tailscale VPN switch to Active.
+4. In phone browser (Chrome/Safari), navigate to `http://<tailscale-ip>:8765`.
+5. Log in with the viewer account (`user` + password configured in motionEye General Settings).
+6. *(Optional)* Tap menu (⋮) -> **Add to Home screen** in Chrome to launch it like a native mobile app.
+
+### Gmail Motion Notification Filters & App Token
+* **Designated Sender & App Token**: motionEye sends email notifications via Gmail SMTP (`smtp.gmail.com:587`, TLS enabled) under `davegutz2006@gmail.com`. Google requires a 16-character App Password generated at [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (2FA must be enabled).
+* **Targeted Recipients**: Configured in `motioneye-config.tar.gz` for `davegutz2006@gmail.com` and `kpeanes@gmail.com`.
+* **Inbox Filtering**: In Gmail for each targeted account:
+  1. Open Settings -> **Filters and Blocked Addresses** -> **Create a new filter**.
+  2. Set **From** to `davegutz2006@gmail.com` and/or **Subject** containing `motion_start` / `Camera1`.
+  3. Action: **Apply the label** (e.g. `Camera-Alerts`), **Skip the Inbox (Archive it)**, and **Never send it to Spam**.
+
 ### Companion CLI Commands
 The shared `common` dotfiles package includes helper utilities stowed into `~/.local/bin/`:
 * **`camera-review`**:

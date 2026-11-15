@@ -10,6 +10,8 @@ MYCOMPUTER_DIR="$(cd "$DOTFILES_DIR/../myComputer" 2>/dev/null && pwd || echo "$
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 RED='\033[0;31m'
 NC='\033[0m'
 
@@ -245,14 +247,54 @@ echo -e "\n${GREEN}====================================================${NC}"
 echo -e "${GREEN}   Security Camera (motionEye) Installed!           ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-echo -e "Web Dashboard URL:"
-echo -e "  Local:        ${YELLOW}http://localhost:8765${NC} or ${YELLOW}http://${LOCAL_IP}:8765${NC}"
+TS_IP=""
 if command -v tailscale >/dev/null 2>&1; then
     TS_IP=$(tailscale ip -4 2>/dev/null || true)
-    if [ -n "$TS_IP" ]; then
-        echo -e "  Tailscale:    ${YELLOW}http://${TS_IP}:8765${NC}"
-    fi
 fi
-echo -e "\nQuick CLI Tools:"
+
+echo -e "${BOLD}Web Dashboard URL:${NC}"
+echo -e "  Local:        ${YELLOW}http://localhost:8765${NC} or ${YELLOW}http://${LOCAL_IP}:8765${NC}"
+if [ -n "$TS_IP" ]; then
+    echo -e "  Tailscale:    ${YELLOW}http://${TS_IP}:8765${NC}"
+fi
+
+echo -e "\n${GREEN}--- Phone Setup (Tailscale Remote Access) ---${NC}"
+echo -e "  1. Install ${BOLD}Tailscale${NC} from the Google Play Store or Apple App Store."
+echo -e "  2. Sign in as designated Tailscale user: ${CYAN}davegutz2006@gmail.com${NC}"
+echo -e "  3. Toggle the Tailscale VPN switch to ${BOLD}Connected${NC}."
+if [ -n "$TS_IP" ]; then
+    echo -e "  4. In your phone browser, open: ${YELLOW}http://${TS_IP}:8765${NC}"
+else
+    echo -e "  4. In your phone browser, open: ${YELLOW}http://<tailscale-ip>:8765${NC}"
+fi
+echo -e "  5. Log in with viewer account (username: ${CYAN}user${NC}, password set in motionEye General Settings)."
+echo -e "     ${YELLOW}Tip:${NC} In mobile Chrome, tap menu (⋮) -> 'Add to Home screen' for 1-tap app access."
+
+echo -e "\n${GREEN}--- Gmail Motion Notification Filters ---${NC}"
+echo -e "  Targeted recipient emails (from motioneye-config.tar.gz):"
+echo -e "    • ${CYAN}davegutz2006@gmail.com${NC}"
+echo -e "    • ${CYAN}kpeanes@gmail.com${NC}"
+echo -e "  To prevent inbox clutter and organize motion alerts in Gmail for each account:"
+echo -e "  1. Open Gmail -> Settings (gear icon) -> ${BOLD}'See all settings'${NC} -> ${BOLD}'Filters and Blocked Addresses'${NC}."
+echo -e "  2. Click ${BOLD}'Create a new filter'${NC} and configure:"
+echo -e "     - From: ${CYAN}davegutz2006@gmail.com${NC}"
+echo -e "     - Subject / Has words: ${CYAN}motion_start${NC} (or ${CYAN}Camera1${NC})"
+echo -e "  3. Click ${BOLD}'Create filter'${NC} and select:"
+echo -e "     • ${YELLOW}Apply the label:${NC} create a label (e.g. 'Camera-Alerts')"
+echo -e "     • ${YELLOW}Skip the Inbox (Archive it)${NC} (optional, to keep main inbox clean)"
+echo -e "     • ${YELLOW}Never send it to Spam${NC}"
+
+echo -e "\n${GREEN}--- Gmail App Token Note ---${NC}"
+echo -e "  Designated SMTP sending user: ${CYAN}davegutz2006@gmail.com${NC}"
+echo -e "  Google requires a 16-character ${BOLD}App Password${NC} (not your standard account password):"
+echo -e "  1. Ensure 2-Step Verification is turned on for ${CYAN}davegutz2006@gmail.com${NC}."
+echo -e "  2. Go to: ${CYAN}https://myaccount.google.com/apppasswords${NC}"
+echo -e "  3. Create an app password named 'motionEye' and copy the 16-character token."
+echo -e "  4. Configure in motionEye -> Settings -> Motion Notifications (or camera-1.conf):"
+echo -e "     - SMTP Server: ${YELLOW}smtp.gmail.com:587${NC} (TLS: ON)"
+echo -e "     - From / Username: ${CYAN}davegutz2006@gmail.com${NC}"
+echo -e "     - Password: ${YELLOW}<16-character app token>${NC}"
+
+echo -e "\n${GREEN}--- Quick CLI Tools ---${NC}"
 echo -e "  Browse media:    ${YELLOW}camera-review${NC} (or: ${YELLOW}camera-review --vlc${NC})"
 echo -e "  Daily timelapse: ${YELLOW}camera-timelapse${NC}"
