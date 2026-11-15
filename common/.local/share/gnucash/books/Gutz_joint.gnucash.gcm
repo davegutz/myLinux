@@ -14,7 +14,7 @@ BaseAccount=Assets:Katherine Checking *1871
 ColumnTypes=None;Date;Description;Amount;Amount;None;
 
 [dialogs/import/generic_matcher/account_matcher]
-column_order=name;type;commodity;account-code;description;lastnum;present;present_report;balance;balance_report;balance-period;cleared;cleared_report;reconciled;reconciled_report;last-recon-date;future_min;future_min_report;total;total_report;total-period;account-color;account-balance-limit;notes;tax-info;hidden;placeholder;opening-balance;online-id;
+column_order=name;type;commodity;account-code;description;lastnum;present;present_report;balance;balance_report;balance-period;cleared;cleared_report;reconciled;reconciled_report;last-recon-date;future_min;future_min_report;total;total_report;total-period;account-color;account-balance-limit;notes;tax-info;hidden;placeholder;opening-balance;online-id;earliest-date;
 type_visible=true
 commodity_visible=false
 commodity_width=0
@@ -484,13 +484,22 @@ transfer_width=260
 debit_width=105
 credit_width=105
 
+[Register 639cf14a761346e3839d04a69d3a82f3]
+date_width=114
+num_width=56
+reconcile_width=25
+balance_width=96
+transfer_width=246
+debit_width=96
+credit_width=96
+
 [Window 1]
-PageCount=5
+PageCount=6
 FirstPage=1
-PageOrder=2;1;3;4;5;
-WindowPosition=0;0;
-WindowGeometry=1920;1003;
-WindowMaximized=true
+PageOrder=6;5;4;3;2;1;
+WindowPosition=20;20;
+WindowGeometry=948;987;
+WindowMaximized=false
 ToolbarVisible=true
 SummarybarVisible=true
 StatusbarVisible=true
@@ -502,7 +511,7 @@ AccountTypes=-1
 ShowHidden=false
 ShowZeroTotal=true
 ShowUnused=true
-SelectedAccount=Assets:Katherine Checking *1871
+SelectedAccount=Unspecified
 OpenAccount1=Assets
 OpenAccount2=Assets:FREE REWARDS CK, *2680
 OpenAccount3=Joint Expenses
@@ -512,14 +521,23 @@ NumberOfOpenAccounts=5
 
 [Page 2]
 PageType=GncPluginPageRegister
-PageName=Katherine Checking *1871
+PageName=Unspecified
 RegisterType=Account
-AccountName=Assets:Katherine Checking *1871
-AccountGuid=81d2909422804bfdaed7ccacb31c74b9
+AccountName=Unspecified
+AccountGuid=e4a5f22c443f43328ee10caeb00f3676
 RegisterStyle=Ledger
 DoubleLineMode=false
 
 [Page 3]
+PageType=GncPluginPageRegister
+PageName=Chase Prime CC D *8079
+RegisterType=Account
+AccountName=Liabilities:Chase Prime CC D *8079
+AccountGuid=1985603fa823407da8b7ef7650e27315
+RegisterStyle=Ledger
+DoubleLineMode=false
+
+[Page 4]
 PageType=GncPluginPageRegister
 PageName=FREE REWARDS CK, *2680
 RegisterType=Account
@@ -528,7 +546,7 @@ AccountGuid=1409566365cf41e280e19e35e33ee732
 RegisterStyle=Ledger
 DoubleLineMode=false
 
-[Page 4]
+[Page 5]
 PageType=GncPluginPageRegister
 PageName=Excess HSA
 RegisterType=Account
@@ -537,7 +555,7 @@ AccountGuid=8bd8731cd861413c82ac60d37c6e22b8
 RegisterStyle=Ledger
 DoubleLineMode=false
 
-[Page 5]
+[Page 6]
 PageType=GncPluginPageReport
 PageName=Transaction Report
-SchemeOptions=(let ((options (gnc:report-template-new-options/report-guid "2fe3b9833af044abb929a88d5a59620f" "Transaction Report"))) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Accounts")))   ((lambda (o) (if o (gnc:option-set-value o '("61058be96f8045f280abf29d8e27cf9c" "81d2909422804bfdaed7ccacb31c74b9")))) option)) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Filter Type")))   ((lambda (o) (if o (gnc:option-set-value o 'include))) option)) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Filter By…")))   ((lambda (o) (if o (gnc:option-set-value o '("1e902aeedf464ae4a6e1dcfcaca6d1aa" "897fa513d8164acea5366efcd8f832db" "a5532517917e4102a1ec6cb096d45127" "f37a11f9c3064383a4d8f7165c104473" "d2c41c9491534a29aecc7a6c1f51b953" "9ede83c0256545efbe0b7fad4d3e9945" "4b0d69aaeac94921b94ed56313410965" "429cce7256b84162978501e4e11376e5" "e563c144b12645e5b73ea533652d7cdd" "b501593e1b4347f89330dea1e2e46e3f" "f49a1708bd654f5fa5bed5c20515f496" "8471ad10ecdb4bc68b7e483b9f7903e7" "ac46405f887c4bbfa58621a5806aef72" "235c765f683147e0961910ed86694467" "096346a2ed3140e1bb0d995f32cc2dcb" "879a7dc925c8438c8462194f1aac2704" "a3e18bb931764c77a10bc18d1fbb0752" "998649094b1c488c9ca2efd54fe2b68e" "c2f8dfffdfcb4716954127c7807ecb3f" "91ec55258e85415689c35f9cd1ef39dd" "ba20b52664a641b0a77a7eb5ec05da8d" "639cf14a761346e3839d04a69d3a82f3" "9e467f223b1d4b75aa42aa692063b39b" "61ca0857d6634aef84ed2d84403ee971" "2a212c1ec6074dd7b883b85fc280eb14" "38af5b3e9e15424d9944caf9c5fcf757" "d3831052f12c451ba2060f121ec80d0d" "ce52287ec9a6480d8b0837cc70454f72" "cb579055228840c8a6ad4b4a57b078cd" "00f29e67329c4d3d8ea4b07cc8427b58" "fe91a151c2d74833923c05b40b70e007" "355048825680489f8e60d2e9f89321e4" "739a08d51d1449d6806e02724052b9b2" "1f34b1be3434483ba764986110f82c97" "3fa8d5973fcc434b97d98ffb02aa726a" "59edd004797b469393da26deedd9a6a4" "41c40d550c5f46d180d2284b0c515292" "1ccbdc3d386543e0819c23a1297308bc" "728f0c22b46a4cad86a5e5aae646c3d4" "079094f32828408480281608db6afab8" "550f6f9d71894399a1a6f4d2c950772f" "ed4b9f248d38461180d1407e4e244364" "46e28d60481e479a80b198225cd523f3" "a06aeafd01f447379beaf089c30ebfef" "2d61821f6679462193fc229f87a85a13" "af239feec37b4116a9032f3bed37f44a" "8ac968aa09bc40e5a0f012aaa99cc93b" "7394828652c9499ab9619c771772043c" "374480d657a642d195bfdacc62be596a" "857c535371af4d8ea6793b4813d02a41" "73e451bc49dc4810a5fc5e4a0efbaf6f" "f6475971db07441799577246d86ea540" "f43f5498ebb4442484c3708f5d4025b3" "d4ce9a18d1a544f8b3ffa9d60599341a" "0bf184b3ab5346068341d89bca9e0a6a" "9d5654edb2c547808f61f2be6df1bf34" "3855bc0d0b014d59a837f75a1ee165f3" "1e2194f2c44f497d8190eea9e2a00f21" "4613374151d44f77a2a5c4eb25f40571" "9f3b036711d64415884c8a8976fb5f51" "3406df2a89a74cf7ad35aa56b2062800" "1c0804736b904d3bb1d243c0ac1fa972" "599666789bda4c529ec752f959189a4a")))) option)) (let ((option (gnc:lookup-option options                                  "General"                                  "Start Date")))   ((lambda (o) (if o (gnc:option-set-value o '(absolute . 1792148340)))) option)) (let ((option (gnc:lookup-option options                                  "General"                                  "End Date")))   ((lambda (o) (if o (gnc:option-set-value o '(absolute . 1792925940)))) option))   (gnc:restore-report-by-guid-with-custom-template 0 "2fe3b9833af044abb929a88d5a59620f" "Transaction Report" "" options) )
+SchemeOptions=(let ((options (gnc:report-template-new-options/report-guid "2fe3b9833af044abb929a88d5a59620f" "Transaction Report"))) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Accounts")))   ((lambda (o) (if o (gnc:option-set-value o '("bc50095fe04a457397b416f136a12c21")))) option)) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Filter Type")))   ((lambda (o) (if o (gnc:option-set-value o 'include))) option)) (let ((option (gnc:lookup-option options                                  "Accounts"                                  "Filter By…")))   ((lambda (o) (if o (gnc:option-set-value o '("7bebdedd32f0433e996b131bcd01b038" "29d945793c1042a6b5d1be6b0a472a33" "1e6b726a21bf44338689d0ec8a736cff" "d0f998541f664489916aed6c78699ec8" "01b1c68ab0f04ce9b98da135e2a0f05d" "fb9d25df6cf74c8498bcdf0901337074" "e8008d2a6c2f46b487d254d22f71c128" "e02e5a746c204efea8d96d3c691cbaa8" "553a08d4afee4726b18ba1484331b113" "c8ef794c1fe24e70b182c3fe921fcc3f" "ca13ef6a539b499bae6958e6b88144cf" "7bbf6070c2b84494a41447db0baecaff" "b6e86c11cc604080a2dd660440f44556" "13b357f5db374b32b5fe1bd299b535ef" "7199ee4127244660af31dba7f70032a3" "4ca8c7dfd9714f64a7a4bb80acc881cb" "dfdc9dfe13c24839ae1770d881d41988" "392a452cd78e44fd90269a0165e0357e" "43438591abc44e9e88c7d53bcdd98b2d" "522efca6ce2347e7907be417d2decd42" "4c058d106f9448b186776f88c2128eee" "40ea6b9047bd41ca892bac52275b1a88" "fa047cf910ee46119f989658e1983193" "4327707e85854519afd13e97bf2143f3" "4ca8ce551ffc4bf69462865a0b76e6b5" "1ecb74f8c0994ec5b2c44f526e3dcf41" "10d3809fedb7468c9b4a757dea6b1c6f" "34b5ae564a6d4165ba2884ff8dc6a0ce" "d03da1f88d8e43dfa88a30be1a03c2cf" "8aff1e8abe9d4145bf25e320556d0be8" "ef0b90be51524dafa42a32198803a9c5" "c4fedb5ba96c437c8099b938a71e3445" "ddbbee5b8d5144d7b79a57b4ed05e0f3" "48e2b3311a944d80be03d1e084d96524" "9037ba22b28344729ca8e378b5b09b30" "cd5a287088134a11bf5df32517becd05" "c38c27e8ac9743ed963e2d8c9fdb3350" "8d52f15474074117b85ac533bb4767ea" "dea5bbd763e940d0a2bb41eb1598d77d" "e619e3e318044c6f9185a3d842c1bec1" "0788ed24acf7425a911a6c31f2017611" "e4bc1656bbdf448eab147cb2119e6c82" "aa65647f9c2b44d4a3c5ead14e53245f" "18ef06c8f83e4b35a57016403502776e" "a9eedecdca2b4b07bbd27964eb16e3be" "244caa1a973a48dcb9b979601cd9aa65" "58069b8f5fe547d3b77e159b611ebdea" "6eb488c107eb46b4a3db72d0adf2f582" "18227c47703e46978dde925b64e7b66e" "a2d3dc0f4db7463298e88be4f3333f0d" "061443fa91c448dcb1e0822b6bfb07b5" "814d7ea6f2154408810f7a14857fea1e" "3eb08fbef1b147b09883693a9af45313" "f774a7dc27b3439f983fa293d93878fa" "d424041bdd31454f89e892b77113de97" "29a6c6966dd14b5ab05f5ae05fa9e307" "e8b10db0bc97491c81d0e853347609ac" "0a0a119a3eaf4e7f904f6ace77e959c3" "f52315e9eb7d450db004a247006715cd" "b1ed621364194f24821ee61ae5a2b9dc" "7ef8177935164e318da6080f90cbbbaf" "85c98e70fb334d2f9cfeb4b9b7b18f9d" "84e9120b6b7a422fb37ab5903da86848" "11cc83c0e3d841a9a4b8be3babb709c9" "c80d6955fb6345879e4fe10214b5a05d" "9fa7828a43634c9493bb0f955dfee18b" "4173d88a344147458d8c5138113e8fbe" "274265c061344b33bd4cab6e50fe03b9" "06af91b90e284fbaa6dc26b5c2d6b0f4" "00a5935cbc2649e791a4b97d39889458" "53dba5645d99470bbccdc283e9114009" "5cdcb3e7dd0f4d57b8c708bebe9ff819" "f7ef0113403a4c8fbf2398f3fa727f91" "8c9c6c47ab1642cb929974ffa67e0049" "e14ef47c911247d989dfd1190b708b85" "1d0b36ddd1914703a467604df476df05" "a04aba6b702f4a4fa8cc68c1a5c4c50b" "71406c80efdb4eceac71f288599cd2a5" "0e5b5234a9f448fd87317a5e95d4b47a" "7c38d00db9f34c1c90050ffe390b678f" "efb4b1ab8de5452fbf59839416c5c9f6")))) option)) (let ((option (gnc:lookup-option options                                  "General"                                  "Start Date")))   ((lambda (o) (if o (gnc:option-set-value o '(absolute . 1793012340)))) option)) (let ((option (gnc:lookup-option options                                  "General"                                  "End Date")))   ((lambda (o) (if o (gnc:option-set-value o '(absolute . 1794653940)))) option))   (gnc:restore-report-by-guid-with-custom-template 0 "2fe3b9833af044abb929a88d5a59620f" "Transaction Report" "" options) )
