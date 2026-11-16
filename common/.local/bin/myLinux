@@ -40,6 +40,7 @@ usage() {
     echo -e "  ${GREEN}myLinux theme${NC}                 Apply unified dark appearance (GTK, KDE Plasma, LXQt)"
     echo -e "  ${GREEN}myLinux autostart [DE]${NC}        Manage autostart package (plasma|cosmic|gnome|detect)"
     echo -e "  ${GREEN}myLinux daemon [status|run]${NC}   Manage Rclone daily backup timer & logs"
+    echo -e "  ${GREEN}myLinux secrets [sync|setup|push|pull|lock|status]${NC} Manage Cryptomator SecretsVault (rclone.conf)"
     echo -e "  ${GREEN}myLinux finance [status|unlock|lock|backup|setup]${NC} Manage Cryptomator FinanceVault & USB backups"
     echo -e "  ${GREEN}myLinux cd${NC}                    Print path to repository (run: ${CYAN}cd \$(myLinux cd)${NC})"
     echo ""
@@ -103,6 +104,10 @@ case "${1:-}" in
     security)
         shift
         dotfiles security "$@"
+        ;;
+    secrets|vault)
+        shift
+        "$REPO_DIR/scripts/sync_secrets_vault.sh" "$@"
         ;;
     finance)
         shift

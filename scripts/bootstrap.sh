@@ -17,7 +17,7 @@ echo -e "${BLUE}   Starting myLinux System Synchronization Bootstrap ${NC}"
 echo -e "${BLUE}====================================================${NC}"
 
 # 1. Detect Distribution & Install Core Tools
-echo -e "\n${GREEN}[Step 1/5] Detecting distribution and installing core tools...${NC}"
+echo -e "\n${GREEN}[Step 1/6] Detecting distribution and installing core tools...${NC}"
 
 if [ -f /etc/arch-release ]; then
     echo "Detected Arch-based system (CachyOS)."
@@ -80,11 +80,11 @@ else
 fi
 
 # 2. Back up conflicting existing files before stowing
-echo -e "\n${GREEN}[Step 2/5] Checking and backing up existing conflicting dotfiles...${NC}"
+echo -e "\n${GREEN}[Step 2/6] Checking and backing up existing conflicting dotfiles...${NC}"
 "$DOTFILES_DIR/scripts/backup.sh"
 
 # 3. Ensure target directories exist before Stow executes
-echo -e "\n${GREEN}[Step 3/5] Pre-creating local target directory structure...${NC}"
+echo -e "\n${GREEN}[Step 3/6] Pre-creating local target directory structure...${NC}"
 mkdir -p "$HOME/.config/alacritty"
 mkdir -p "$HOME/.config/fastfetch"
 mkdir -p "$HOME/.config/gtk-3.0"
@@ -160,12 +160,16 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 # 4. Install and configure fonts
-echo -e "\n${GREEN}[Step 4/5] Installing and verifying fonts...${NC}"
+echo -e "\n${GREEN}[Step 4/6] Installing and verifying fonts...${NC}"
 "$DOTFILES_DIR/scripts/install_fonts.sh"
 
 # 5. Align desktop appearance and dark mode
-echo -e "\n${GREEN}[Step 5/5] Aligning desktop appearance and theme...${NC}"
+echo -e "\n${GREEN}[Step 5/6] Aligning desktop appearance and theme...${NC}"
 "$DOTFILES_DIR/scripts/setup_appearance.sh"
+
+# 6. Unlock Cryptomator SecretsVault (120s timeout) to restore rclone/rclone.conf
+echo -e "\n${GREEN}[Step 6/6] Synchronizing secure files (rclone/rclone.conf) via Cryptomator SecretsVault...${NC}"
+"$DOTFILES_DIR/scripts/sync_secrets_vault.sh" sync || true
 
 # Optional: Security camera NVR installation (if requested via argument)
 if [[ "$*" == *"--with-secure-cam"* ]] || [[ "$*" == *"--camera"* ]]; then

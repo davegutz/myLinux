@@ -57,21 +57,22 @@ def lock_financial_vaults():
     except Exception as e:
         log(f"Error dismounting VeraCrypt: {e}")
 
-    # 2. Check & unmount Cryptomator FUSE mount
-    vault_mount = os.path.expanduser("~/.local/share/Cryptomator/mnt/FinanceVault")
-    try:
-        res = subprocess.run(["mountpoint", "-q", vault_mount], check=False)
-        if res.returncode == 0:
-            log(f"Cryptomator mount active at {vault_mount}. Unmounting...")
-            subprocess.run(["fusermount", "-u", "-z", vault_mount], check=False)
-            subprocess.run(["fusermount3", "-u", "-z", vault_mount], check=False)
-            try:
-                if os.path.isdir(vault_mount) and not os.listdir(vault_mount):
-                    os.rmdir(vault_mount)
-            except Exception:
-                pass
-    except Exception as e:
-        log(f"Error unmounting Cryptomator FUSE: {e}")
+    # 2. Check & unmount Cryptomator FUSE mounts (FinanceVault & SecretsVault)
+    for vault_name in ["FinanceVault", "SecretsVault"]:
+        vault_mount = os.path.expanduser(f"~/.local/share/Cryptomator/mnt/{vault_name}")
+        try:
+            res = subprocess.run(["mountpoint", "-q", vault_mount], check=False)
+            if res.returncode == 0:
+                log(f"Cryptomator mount active at {vault_mount}. Unmounting...")
+                subprocess.run(["fusermount", "-u", "-z", vault_mount], check=False)
+                subprocess.run(["fusermount3", "-u", "-z", vault_mount], check=False)
+                try:
+                    if os.path.isdir(vault_mount) and not os.listdir(vault_mount):
+                        os.rmdir(vault_mount)
+                except Exception:
+                    pass
+        except Exception as e:
+            log(f"Error unmounting Cryptomator FUSE ({vault_name}): {e}")
 
     # 3. Terminate Cryptomator app to wipe encryption keys from RAM
     try:

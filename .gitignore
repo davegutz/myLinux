@@ -8,4 +8,10 @@ __pycache__/
 *.pyc
 .msmtprc
 common/.msmtprc
+rclone.conf
+**/rclone/rclone.conf
 .idea/
+
+# Explicitly allow Cryptomator encrypted vault in repository for GitHub sync
+!SecretsVault/
+!SecretsVault/**

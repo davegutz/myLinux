@@ -47,6 +47,7 @@ Type **`myLinux -h`** at any time to see the master command list:
 | `myLinux camera` | Install and configure Security Camera NVR (motionEye) |
 | `myLinux camera-review` | Open interactive thumbnail viewer of today's captures |
 | `myLinux clean` | Reclaim root `/` disk space, vacuum logs, and fstrim |
+| `myLinux secrets [sync|setup|push|pull|lock|status]` | Manage Cryptomator `SecretsVault` (`rclone/rclone.conf` in Git) |
 | `myLinux finance [status|unlock|lock|backup|setup]` | Manage Cryptomator FinanceVault & USB backups |
 | `myLinux tune-io` | Optimize `systemd-homed` LUKS eMMC/SSD I/O performance |
 | `myLinux status` | Check git status of the myLinux repository |

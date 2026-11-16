@@ -81,6 +81,11 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl --user enable --now rclone-daily-backup.timer 2>/dev/null || true
 fi
 
+# 3b. Ensure Cryptomator is installed and synchronize rclone/rclone.conf from SecretsVault (120s timeout)
+if [ -x "$DOTFILES_DIR/scripts/sync_secrets_vault.sh" ]; then
+    "$DOTFILES_DIR/scripts/sync_secrets_vault.sh" sync || true
+fi
+
 # 4. Optional full system package update
 if [[ "$*" == *"--update"* ]]; then
     echo -e "${GREEN}==> Running full system update...${NC}"

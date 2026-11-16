@@ -17,6 +17,7 @@ usage() {
     echo "  autostart [DE]        Manage autostart packages (cosmic | gnome | plasma | detect | status)"
     echo "  daemon [action]       Manage rclone daily backup daemon (status | enable | disable | run | logs)"
     echo "  security [action]     Security scanner & audit (scan | enable | disable | timer | logs)"
+    echo "  secrets [action]      Manage Cryptomator SecretsVault for rclone.conf (sync | setup | push | pull | lock | status)"
     echo "  finance [action]      Manage financial vaults and backups (status | backup | lock | logs)"
     echo "  cd                    Print path to myLinux repository (eval \"cd \$(dotfiles cd)\")"
     echo "  help                  Show this help message"
@@ -174,6 +175,9 @@ case "$1" in
                 ;;
         esac
         ;;
+    secrets|vault)
+        "$REPO_DIR/scripts/sync_secrets_vault.sh" "${@:2}"
+        ;;
     finance)
         case "${2:-status}" in
             status)
@@ -188,13 +192,15 @@ case "$1" in
                 finance-usb-backup "${@:3}"
                 ;;
             lock)
-                echo "Manually locking financial vaults..."
-                vault_mount="$HOME/.local/share/Cryptomator/mnt/FinanceVault"
-                if mountpoint -q "$vault_mount" 2>/dev/null || grep -q "$vault_mount" /proc/mounts 2>/dev/null; then
-                    fusermount -u -z "$vault_mount" 2>/dev/null || fusermount3 -u -z "$vault_mount" 2>/dev/null || true
-                    rmdir "$vault_mount" 2>/dev/null || true
-                    echo "Unmounted $vault_mount"
-                fi
+                echo "Manually locking financial and secrets vaults..."
+                for vname in FinanceVault SecretsVault; do
+                    vault_mount="$HOME/.local/share/Cryptomator/mnt/$vname"
+                    if mountpoint -q "$vault_mount" 2>/dev/null || grep -q "$vault_mount" /proc/mounts 2>/dev/null; then
+                        fusermount -u -z "$vault_mount" 2>/dev/null || fusermount3 -u -z "$vault_mount" 2>/dev/null || true
+                        rmdir "$vault_mount" 2>/dev/null || true
+                        echo "Unmounted $vault_mount"
+                    fi
+                done
                 if pgrep -x cryptomator >/dev/null 2>&1 || pgrep -f "^/usr/bin/cryptomator|^/opt/cryptomator|org\.cryptomator\.Cryptomator" >/dev/null 2>&1; then
                     flatpak kill org.cryptomator.Cryptomator 2>/dev/null || pkill -TERM -x cryptomator 2>/dev/null || true
                     echo "Terminated Cryptomator application."

@@ -107,12 +107,41 @@ The desktop launcher (`~/Desktop/GnuCash-Joint.desktop`) manages bidirectional s
 
 ---
 
-### 4. Google Drive & Rclone Setup (`rclone.conf`)
+### 4. Google Drive & Rclone Setup (`rclone.conf` in Cryptomator `SecretsVault`)
 The `~/bin/Rclone` mount and daily backup rely on an active `gdrive:` remote configured in `~/.config/rclone/rclone.conf`.
 
 > [!IMPORTANT]
-> **Why `rclone.conf` is NOT included in this repository:**
-> `rclone.conf` contains sensitive authentication secrets—including active OAuth access tokens, refresh tokens, and private client secrets. Because GitHub repositories must never store credentials or private tokens, `rclone.conf` is intentionally excluded from the `myLinux` configuration and must be set up or copied locally on each machine.
+> **Encrypted `SecretsVault` in Git & GitHub:**
+> Plaintext `rclone.conf` contains sensitive OAuth tokens and client secrets that GitHub's secret scanner blocks and must never be committed unencrypted. Instead, `myLinux` stores `rclone/rclone.conf` inside an encrypted Cryptomator vault (`~/Documents/GitHub/myLinux/SecretsVault`).
+> * Because Cryptomator encrypts both file contents and filenames (`vault.cryptomator`, `masterkey.cryptomator`, `d/.../*.c9r`), **Git and GitHub safely accept and version-control `SecretsVault/`** with zero plaintext secret exposure.
+> * During `./install.sh` (`scripts/bootstrap.sh`) and `myLinux sync` (`scripts/sync.sh`), `myLinux` ensures the `cryptomator` package is installed, launches Cryptomator, and waits up to **120 seconds** for you to unlock `SecretsVault`.
+> * If unlocked within 120 seconds, `SecretsVault/rclone/rclone.conf` is synced to `~/.config/rclone/rclone.conf` (`chmod 600`) and Google Drive is mounted automatically. If the 120-second timeout expires (or Cryptomator is closed), installation/sync moves on cleanly without the secure folder files.
+
+#### First-Time Setup (Creating `SecretsVault` on a Machine that Has `rclone.conf`):
+1. Run:
+   ```bash
+   myLinux secrets setup
+   ```
+2. In the Cryptomator window that opens:
+   * Click **+ Add Vault** $\rightarrow$ **Create New Vault**.
+   * Name it **`SecretsVault`** and select custom location **`~/Documents/GitHub/myLinux`** (creating `~/Documents/GitHub/myLinux/SecretsVault`).
+   * Set your vault password and **Unlock** the vault.
+3. Within 120s of unlocking, `myLinux secrets setup` automatically copies `~/.config/rclone/rclone.conf` into `SecretsVault/rclone/rclone.conf`.
+4. Commit and push the encrypted vault to GitHub:
+   ```bash
+   git -C ~/Documents/GitHub/myLinux add SecretsVault
+   git -C ~/Documents/GitHub/myLinux commit -m "Add encrypted SecretsVault with rclone.conf"
+   git -C ~/Documents/GitHub/myLinux push
+   ```
+
+#### SecretsVault CLI Commands:
+```bash
+myLinux secrets sync     # Open Cryptomator (120s timeout) and sync rclone/rclone.conf
+myLinux secrets push     # Copy local ~/.config/rclone/rclone.conf into SecretsVault
+myLinux secrets pull     # Restore SecretsVault/rclone/rclone.conf to ~/.config/rclone/rclone.conf
+myLinux secrets status   # Check SecretsVault & local rclone.conf status
+myLinux secrets lock     # Unmount and lock SecretsVault
+```
 
 #### Keeping vs. Updating `token =` in `rclone.conf`:
 * **Default Setup (No Custom Client ID)**: **Keep** `token = ...`. It holds your Google OAuth login session and refresh token. Without it, Rclone cannot authenticate.
