@@ -42,8 +42,9 @@ Type **`myLinux -h`** at any time to see the master command list:
 | Command | Action |
 |---------|--------|
 | `myLinux -h` | Show help and available commands |
-| `myLinux sync` | Pull latest dotfiles from GitHub and re-stow |
+| `myLinux sync` | Pull latest dotfiles from GitHub (with clash guard) and re-stow |
 | `myLinux update` | Pull dotfiles and run full OS package updates |
+| `myLinux push ["msg"]` | Check GitHub for clashes, lock `SecretsVault`, commit, and push |
 | `myLinux camera` | Install and configure Security Camera NVR (motionEye) |
 | `myLinux camera-review` | Open interactive thumbnail viewer of today's captures |
 | `myLinux clean` | Reclaim root `/` disk space, vacuum logs, and fstrim |

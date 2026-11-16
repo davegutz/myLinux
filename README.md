@@ -30,7 +30,14 @@ cd myLinux
 ### 2. Refreshing & Synchronizing Existing Machines
 Whenever you make configuration changes on one machine, publish them to GitHub and sync across your other installations:
 
-#### Step 1: Push Updates to GitHub (Handling 2FA)
+* **`myLinux` Pre-Flight GitHub Guard & Clash Protection (`scripts/git_guard.sh`)**:
+  * **Automatic Pre-Flight Check**: Every operational `myLinux` command (`secrets`, `finance`, `autostart`, `theme`, `camera`, `clean`, etc.) performs a fast, 4-second timeout check against GitHub before executing.
+  * **Auto Fast-Forward**: If your machine is behind GitHub and has no local edits, `myLinux` automatically fast-forwards (`git merge --ff-only`) and re-stows before running your command.
+  * **Benign `.gcm` Noise Cleanup**: If GnuCash modified `Gutz_joint.gnucash.gcm` window metadata locally while GitHub has newer commits, `git_guard.sh` automatically resets `.gcm` so it never blocks a pull.
+  * **Safe Clash Resolution**: If both GitHub and the local machine have modified the same files (or both modified `SecretsVault`), `git_guard.sh` prevents broken rebases/corrupted binary merges, backs up your local changes to `~/.dotfiles_backup/clash_<timestamp>/`, and launches an interactive menu (`[1] Accept GitHub version`, `[2] Keep Local version`, `[3] Stash Local & Pull`, `[4] Show Diff & Abort`).
+  * **One-Command Safe Publish (`myLinux push "message"`)**: Checks GitHub for clashes, ensures `SecretsVault` is locked, stages all changes, commits, and pushes.
+
+#### Step 1: Push Updates to GitHub (`myLinux push` & Handling 2FA)
 Because GitHub accounts with **Two-Factor Authentication (2FA)** reject plain account passwords over HTTPS, use one of the standard GitHub authentication methods:
 
 * **Option A: SSH Key Authentication (Recommended for terminal `git push`)**

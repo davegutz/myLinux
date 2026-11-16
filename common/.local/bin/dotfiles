@@ -7,10 +7,11 @@ usage() {
     echo "Usage: dotfiles [command]"
     echo ""
     echo "Commands:"
-    echo "  sync                  Pull latest changes and re-stow configurations"
+    echo "  sync                  Pull latest changes (with clash guard) and re-stow configurations"
     echo "  update                Pull changes, re-stow, and run full system updates"
+    echo "  push [msg]            Sync with GitHub, lock SecretsVault, commit, and push"
     echo "  status [args]         Show git status of the myLinux repository (use -r to fetch first)"
-    echo "  check                 Check GitHub to see if remote updates are available"
+    echo "  check                 Check GitHub to see if remote updates or clashes exist"
     echo "  diff                  Show unstaged changes in the myLinux repository"
     echo "  camera                Install and configure security camera NVR (motionEye)"
     echo "  camera-review         Browse recorded camera captures (feh / vlc)"
@@ -23,12 +24,24 @@ usage() {
     echo "  help                  Show this help message"
 }
 
+# Run pre-flight GitHub & clash check on operational commands
+if [ -x "$REPO_DIR/scripts/git_guard.sh" ]; then
+    "$REPO_DIR/scripts/git_guard.sh" preflight "${1:-}"
+fi
+
 case "$1" in
     sync)
         "$REPO_DIR/scripts/sync.sh"
         ;;
     update)
         "$REPO_DIR/scripts/sync.sh" --update
+        ;;
+    push)
+        shift
+        "$REPO_DIR/scripts/git_guard.sh" push "$@"
+        ;;
+    resolve|clash)
+        "$REPO_DIR/scripts/git_guard.sh" resolve
         ;;
     camera|install-camera|secure-cam)
         "$REPO_DIR/scripts/install_secure_cam.sh"
@@ -56,15 +69,19 @@ case "$1" in
         fi
         behind=$(git -C "$REPO_DIR" rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
         ahead=$(git -C "$REPO_DIR" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+        dirty=$(git -C "$REPO_DIR" status --porcelain 2>/dev/null | wc -l)
 
-        if [ "$behind" -gt 0 ]; then
+        if [ "$behind" -gt 0 ] && { [ "$ahead" -gt 0 ] || [ "$dirty" -gt 0 ]; }; then
+            echo -e "\033[1;31m==> CLASH WARNING: myLinux is BEHIND GitHub by $behind commit(s) AND has local changes ($ahead ahead, $dirty uncommitted).\033[0m"
+            echo "Run 'myLinux sync' to launch the interactive clash resolver."
+        elif [ "$behind" -gt 0 ]; then
             echo -e "\033[1;33m==> myLinux is BEHIND GitHub by $behind commit(s).\033[0m"
-            echo "Run 'dotfiles sync' (or 'mylinux-sync') to pull and re-stow configurations."
-        elif [ "$ahead" -gt 0 ]; then
-            echo -e "\033[1;32m==> myLinux is AHEAD of GitHub by $ahead commit(s).\033[0m"
-            echo "Run 'git -C \$(dotfiles cd) push' (or 'gp') to publish local commits."
+            echo "Run 'myLinux sync' (or 'mylinux-sync') to pull and re-stow configurations."
+        elif [ "$ahead" -gt 0 ] || [ "$dirty" -gt 0 ]; then
+            echo -e "\033[1;32m==> myLinux has local changes ($ahead commit(s) ahead, $dirty uncommitted file(s)).\033[0m"
+            echo "Run 'myLinux push \"commit message\"' to publish local changes to GitHub."
         else
-            echo -e "\033[0;32m==> myLinux is UP TO DATE with GitHub.\033[0m"
+            echo -e "\033[0;32m==> myLinux is UP TO DATE and CLEAN with GitHub.\033[0m"
         fi
         ;;
     diff)

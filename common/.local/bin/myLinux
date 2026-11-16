@@ -19,9 +19,10 @@ usage() {
     echo -e "${BOLD}Usage:${NC} myLinux [command] [options]"
     echo ""
     echo -e "${YELLOW}${BOLD}Dotfiles & System Update Commands:${NC}"
-    echo -e "  ${GREEN}myLinux sync${NC}                  Pull latest dotfiles from GitHub and re-stow configs"
+    echo -e "  ${GREEN}myLinux sync${NC}                  Pull latest dotfiles from GitHub (with clash guard) and re-stow"
     echo -e "  ${GREEN}myLinux update${NC}                Pull dotfiles, re-stow, and run full system package upgrades"
-    echo -e "  ${GREEN}myLinux check${NC}                 Check GitHub to see if remote updates are available"
+    echo -e "  ${GREEN}myLinux push [msg]${NC}            Check GitHub for clashes, lock SecretsVault, commit, and push"
+    echo -e "  ${GREEN}myLinux check${NC}                 Check GitHub to see if remote updates or clashes exist"
     echo -e "  ${GREEN}myLinux status [-r]${NC}           Show git status of myLinux repo (use -r to fetch first)"
     echo -e "  ${GREEN}myLinux diff${NC}                  Show unstaged local changes in myLinux"
     echo ""
@@ -52,12 +53,24 @@ usage() {
     echo -e "${BLUE}===================================================================${NC}"
 }
 
+# Run pre-flight GitHub & clash check on operational commands
+if [ -x "$REPO_DIR/scripts/git_guard.sh" ]; then
+    "$REPO_DIR/scripts/git_guard.sh" preflight "${1:-}"
+fi
+
 case "${1:-}" in
     sync)
         "$REPO_DIR/scripts/sync.sh"
         ;;
     update)
         "$REPO_DIR/scripts/sync.sh" --update
+        ;;
+    push)
+        shift
+        "$REPO_DIR/scripts/git_guard.sh" push "$@"
+        ;;
+    resolve|clash)
+        "$REPO_DIR/scripts/git_guard.sh" resolve
         ;;
     camera|install-camera|secure-cam)
         "$REPO_DIR/scripts/install_secure_cam.sh"

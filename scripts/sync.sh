@@ -16,10 +16,14 @@ echo -e "${BLUE}==============================================${NC}"
 
 cd "$DOTFILES_DIR"
 
-# 1. Pull latest changes from git
+# 1. Pull latest changes from git with clash protection & single-instance lock
 if [ -d .git ]; then
-    echo -e "${GREEN}==> Fetching and rebasing from remote repository...${NC}"
-    git pull --rebase || echo -e "${YELLOW}Warning: git pull failed or no remote configured yet.${NC}"
+    if [ -x "$DOTFILES_DIR/scripts/git_guard.sh" ]; then
+        "$DOTFILES_DIR/scripts/git_guard.sh" pull
+    else
+        echo -e "${GREEN}==> Fetching and rebasing from remote repository...${NC}"
+        git pull --rebase || echo -e "${YELLOW}Warning: git pull failed or no remote configured yet.${NC}"
+    fi
 fi
 
 # 2. Ensure target directories exist before stowing
