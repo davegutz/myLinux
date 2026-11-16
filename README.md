@@ -143,10 +143,11 @@ The `~/bin/Rclone` mount and daily backup rely on an active `gdrive:` remote con
 
 #### SecretsVault CLI Commands:
 ```bash
-myLinux secrets sync     # Open Cryptomator (120s timeout) and sync rclone/rclone.conf
-myLinux secrets push     # Copy local ~/.config/rclone/rclone.conf into SecretsVault
-myLinux secrets pull     # Restore SecretsVault/rclone/rclone.conf to ~/.config/rclone/rclone.conf
-myLinux secrets status   # Check SecretsVault & local rclone.conf status
+myLinux secrets sync     # Open Cryptomator (120s timeout), sync rclone.conf & SSH keys, and auto-lock
+myLinux secrets ssh      # Generate GitHub Ed25519 SSH key, switch remote to SSH, & save in SecretsVault
+myLinux secrets push     # Copy local rclone.conf, ~/.ssh/id_ed25519, & .git-credentials into SecretsVault
+myLinux secrets pull     # Restore rclone.conf, ~/.ssh/id_ed25519, & .git-credentials from SecretsVault
+myLinux secrets status   # Check SecretsVault, local rclone.conf, and GitHub SSH status
 myLinux secrets lock     # Unmount and lock SecretsVault
 ```
 

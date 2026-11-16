@@ -12,6 +12,10 @@ UNLOCK_TIMEOUT="${SECRETS_UNLOCK_TIMEOUT:-120}"
 
 RCLONE_CONF_LOCAL="$HOME/.config/rclone/rclone.conf"
 MSMTPRC_LOCAL="$HOME/.msmtprc"
+SSH_DIR_LOCAL="$HOME/.ssh"
+SSH_KEY_LOCAL="$HOME/.ssh/id_ed25519"
+SSH_PUB_LOCAL="$HOME/.ssh/id_ed25519.pub"
+GIT_CREDS_LOCAL="$HOME/.git-credentials"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -201,9 +205,76 @@ wait_for_unlock() {
     return 1
 }
 
+sync_single_secret_file() {
+    local vault_file="$1"
+    local local_file="$2"
+    local perms="${3:-600}"
+    local label="$4"
+
+    mkdir -p "$(dirname "$vault_file")"
+    mkdir -p "$(dirname "$local_file")"
+
+    if [ -f "$vault_file" ] && [ -f "$local_file" ]; then
+        if ! cmp -s "$vault_file" "$local_file"; then
+            if [ "$vault_file" -nt "$local_file" ]; then
+                cp -p "$vault_file" "$local_file"
+                chmod "$perms" "$local_file"
+                echo -e "${GREEN}  * Restored newer $label from SecretsVault -> $local_file${NC}"
+            else
+                cp -p "$local_file" "$vault_file"
+                chmod "$perms" "$local_file"
+                echo -e "${GREEN}  * Backed up newer local $local_file -> SecretsVault ($label)${NC}"
+            fi
+        else
+            chmod "$perms" "$local_file"
+            echo -e "${GREEN}  * $label is up to date with SecretsVault.${NC}"
+        fi
+    elif [ -f "$vault_file" ] && [ ! -f "$local_file" ]; then
+        cp -p "$vault_file" "$local_file"
+        chmod "$perms" "$local_file"
+        echo -e "${GREEN}  * Installed $label from SecretsVault -> $local_file${NC}"
+    elif [ ! -f "$vault_file" ] && [ -f "$local_file" ]; then
+        cp -p "$local_file" "$vault_file"
+        chmod "$perms" "$local_file"
+        echo -e "${GREEN}  * Saved local $local_file -> SecretsVault ($label)${NC}"
+    fi
+}
+
+ensure_github_ssh_setup() {
+    if [ -f "$SSH_KEY_LOCAL" ]; then
+        mkdir -p "$SSH_DIR_LOCAL"
+        chmod 700 "$SSH_DIR_LOCAL"
+        chmod 600 "$SSH_KEY_LOCAL"
+        [ -f "$SSH_PUB_LOCAL" ] && chmod 644 "$SSH_PUB_LOCAL"
+
+        # Add github.com host key to known_hosts if not already present so git push never hangs on host prompt
+        if command -v ssh-keyscan >/dev/null 2>&1; then
+            if ! grep -q "github.com" "$SSH_DIR_LOCAL/known_hosts" 2>/dev/null; then
+                ssh-keyscan -t ed25519,rsa github.com >> "$SSH_DIR_LOCAL/known_hosts" 2>/dev/null || true
+                chmod 600 "$SSH_DIR_LOCAL/known_hosts" 2>/dev/null || true
+            fi
+        fi
+
+        # Switch myLinux git remote to SSH URL automatically if currently on HTTPS
+        if [ -d "$DOTFILES_DIR/.git" ]; then
+            local current_url
+            current_url="$(git -C "$DOTFILES_DIR" remote get-url origin 2>/dev/null || true)"
+            if [[ "$current_url" == https://github.com/davegutz/myLinux* ]]; then
+                git -C "$DOTFILES_DIR" remote set-url origin "git@github.com:davegutz/myLinux.git"
+                echo -e "${GREEN}  * Configured myLinux git remote to use SSH (git@github.com:davegutz/myLinux.git)${NC}"
+            fi
+        fi
+    fi
+
+    if [ -f "$GIT_CREDS_LOCAL" ]; then
+        chmod 600 "$GIT_CREDS_LOCAL"
+        git config --global credential.helper store 2>/dev/null || true
+    fi
+}
+
 sync_files_with_vault() {
     local mnt="$1"
-    mkdir -p "$mnt/rclone"
+    mkdir -p "$mnt/rclone" "$mnt/ssh" "$mnt/git"
     mkdir -p "$(dirname "$RCLONE_CONF_LOCAL")"
 
     local vault_rclone="$mnt/rclone/rclone.conf"
@@ -213,34 +284,29 @@ sync_files_with_vault() {
     fi
 
     # 1. Synchronize rclone/rclone.conf
-    if [ -f "$vault_rclone" ] && [ -f "$RCLONE_CONF_LOCAL" ]; then
-        if ! cmp -s "$vault_rclone" "$RCLONE_CONF_LOCAL"; then
-            if [ "$vault_rclone" -nt "$RCLONE_CONF_LOCAL" ]; then
-                cp -p "$vault_rclone" "$RCLONE_CONF_LOCAL"
-                chmod 600 "$RCLONE_CONF_LOCAL"
-                echo -e "${GREEN}  * Restored newer rclone.conf from SecretsVault -> ~/.config/rclone/rclone.conf${NC}"
-            else
-                cp -p "$RCLONE_CONF_LOCAL" "$vault_rclone"
-                chmod 600 "$RCLONE_CONF_LOCAL"
-                echo -e "${GREEN}  * Backed up newer local ~/.config/rclone/rclone.conf -> SecretsVault/rclone/rclone.conf${NC}"
-            fi
-        else
-            chmod 600 "$RCLONE_CONF_LOCAL"
-            echo -e "${GREEN}  * rclone.conf is already up to date with SecretsVault.${NC}"
-        fi
-    elif [ -f "$vault_rclone" ] && [ ! -f "$RCLONE_CONF_LOCAL" ]; then
-        cp -p "$vault_rclone" "$RCLONE_CONF_LOCAL"
-        chmod 600 "$RCLONE_CONF_LOCAL"
-        echo -e "${GREEN}  * Installed rclone.conf from SecretsVault -> ~/.config/rclone/rclone.conf${NC}"
-    elif [ ! -f "$vault_rclone" ] && [ -f "$RCLONE_CONF_LOCAL" ]; then
-        cp -p "$RCLONE_CONF_LOCAL" "$vault_rclone"
-        chmod 600 "$RCLONE_CONF_LOCAL"
-        echo -e "${GREEN}  * Saved local ~/.config/rclone/rclone.conf -> SecretsVault/rclone/rclone.conf${NC}"
+    if [ -f "$vault_rclone" ] || [ -f "$RCLONE_CONF_LOCAL" ]; then
+        sync_single_secret_file "$vault_rclone" "$RCLONE_CONF_LOCAL" 600 "rclone/rclone.conf"
     else
         echo -e "${YELLOW}  * Note: rclone.conf not found in SecretsVault or ~/.config/rclone/rclone.conf yet.${NC}"
     fi
 
-    # 2. Optional: If Google Drive is not mounted yet and rclone.conf is now available, mount it
+    # 2. Synchronize GitHub SSH Keys (~/.ssh/id_ed25519 & id_ed25519.pub)
+    if [ -f "$mnt/ssh/id_ed25519" ] || [ -f "$SSH_KEY_LOCAL" ]; then
+        mkdir -p "$SSH_DIR_LOCAL"
+        chmod 700 "$SSH_DIR_LOCAL"
+        sync_single_secret_file "$mnt/ssh/id_ed25519" "$SSH_KEY_LOCAL" 600 "ssh/id_ed25519"
+        sync_single_secret_file "$mnt/ssh/id_ed25519.pub" "$SSH_PUB_LOCAL" 644 "ssh/id_ed25519.pub"
+    fi
+
+    # 3. Synchronize HTTPS Git Credentials (~/.git-credentials) if present
+    if [ -f "$mnt/git/.git-credentials" ] || [ -f "$GIT_CREDS_LOCAL" ]; then
+        sync_single_secret_file "$mnt/git/.git-credentials" "$GIT_CREDS_LOCAL" 600 "git/.git-credentials"
+    fi
+
+    # 4. Ensure SSH permissions, known_hosts, and git remote URL are aligned
+    ensure_github_ssh_setup
+
+    # 5. Optional: If Google Drive is not mounted yet and rclone.conf is now available, mount it
     if [ -f "$RCLONE_CONF_LOCAL" ] && [ -x "$HOME/bin/Rclone" ]; then
         if ! mountpoint -q "$HOME/gdrive" 2>/dev/null; then
             echo -e "${BLUE}  * Mounting Google Drive via ~/bin/Rclone...${NC}"
@@ -277,16 +343,31 @@ cmd_push() {
     fi
 
     if wait_for_unlock "$UNLOCK_TIMEOUT"; then
-        mkdir -p "$VAULT_MOUNT/rclone"
+        mkdir -p "$VAULT_MOUNT/rclone" "$VAULT_MOUNT/ssh" "$VAULT_MOUNT/git"
+        local pushed_any=false
         if [ -f "$RCLONE_CONF_LOCAL" ]; then
             cp -p "$RCLONE_CONF_LOCAL" "$VAULT_MOUNT/rclone/rclone.conf"
             echo -e "${GREEN}==> Copied ~/.config/rclone/rclone.conf -> $VAULT_MOUNT/rclone/rclone.conf${NC}"
-            cmd_lock
+            pushed_any=true
+        fi
+        if [ -f "$SSH_KEY_LOCAL" ]; then
+            cp -p "$SSH_KEY_LOCAL" "$VAULT_MOUNT/ssh/id_ed25519"
+            [ -f "$SSH_PUB_LOCAL" ] && cp -p "$SSH_PUB_LOCAL" "$VAULT_MOUNT/ssh/id_ed25519.pub"
+            echo -e "${GREEN}==> Copied ~/.ssh/id_ed25519(&.pub) -> $VAULT_MOUNT/ssh/${NC}"
+            ensure_github_ssh_setup
+            pushed_any=true
+        fi
+        if [ -f "$GIT_CREDS_LOCAL" ]; then
+            cp -p "$GIT_CREDS_LOCAL" "$VAULT_MOUNT/git/.git-credentials"
+            echo -e "${GREEN}==> Copied ~/.git-credentials -> $VAULT_MOUNT/git/.git-credentials${NC}"
+            pushed_any=true
+        fi
+        cmd_lock
+        if [ "$pushed_any" = true ]; then
             echo -e "    You can now commit and push the encrypted vault to GitHub:"
-            echo -e "    ${CYAN}git -C $DOTFILES_DIR add SecretsVault && git -C $DOTFILES_DIR commit -m 'Update SecretsVault' && git -C $DOTFILES_DIR push${NC}"
+            echo -e "    ${CYAN}myLinux push \"Update SecretsVault\"${NC}"
         else
-            cmd_lock
-            echo -e "${RED}Error: Local file $RCLONE_CONF_LOCAL does not exist.${NC}"
+            echo -e "${RED}Error: No local secret files (rclone.conf, id_ed25519, .git-credentials) found to push.${NC}"
             exit 1
         fi
     else
@@ -303,6 +384,7 @@ cmd_pull() {
     fi
 
     if wait_for_unlock "$UNLOCK_TIMEOUT"; then
+        local pulled_any=false
         local vault_rclone="$VAULT_MOUNT/rclone/rclone.conf"
         [ ! -f "$vault_rclone" ] && [ -f "$VAULT_MOUNT/rclone.conf" ] && vault_rclone="$VAULT_MOUNT/rclone.conf"
         if [ -f "$vault_rclone" ]; then
@@ -310,13 +392,33 @@ cmd_pull() {
             cp -p "$vault_rclone" "$RCLONE_CONF_LOCAL"
             chmod 600 "$RCLONE_CONF_LOCAL"
             echo -e "${GREEN}==> Restored $vault_rclone -> $RCLONE_CONF_LOCAL (chmod 600)${NC}"
-            cmd_lock
-            if [ -x "$HOME/bin/Rclone" ]; then
-                "$HOME/bin/Rclone" || true
+            pulled_any=true
+        fi
+        if [ -f "$VAULT_MOUNT/ssh/id_ed25519" ]; then
+            mkdir -p "$SSH_DIR_LOCAL"
+            chmod 700 "$SSH_DIR_LOCAL"
+            cp -p "$VAULT_MOUNT/ssh/id_ed25519" "$SSH_KEY_LOCAL"
+            chmod 600 "$SSH_KEY_LOCAL"
+            if [ -f "$VAULT_MOUNT/ssh/id_ed25519.pub" ]; then
+                cp -p "$VAULT_MOUNT/ssh/id_ed25519.pub" "$SSH_PUB_LOCAL"
+                chmod 644 "$SSH_PUB_LOCAL"
             fi
-        else
-            cmd_lock
-            echo -e "${YELLOW}Warning: rclone/rclone.conf not found inside unlocked SecretsVault.${NC}"
+            echo -e "${GREEN}==> Restored SSH key -> $SSH_KEY_LOCAL (chmod 600)${NC}"
+            pulled_any=true
+        fi
+        if [ -f "$VAULT_MOUNT/git/.git-credentials" ]; then
+            cp -p "$VAULT_MOUNT/git/.git-credentials" "$GIT_CREDS_LOCAL"
+            chmod 600 "$GIT_CREDS_LOCAL"
+            echo -e "${GREEN}==> Restored Git credentials -> $GIT_CREDS_LOCAL (chmod 600)${NC}"
+            pulled_any=true
+        fi
+        cmd_lock
+        ensure_github_ssh_setup
+        if [ -f "$RCLONE_CONF_LOCAL" ] && [ -x "$HOME/bin/Rclone" ]; then
+            "$HOME/bin/Rclone" || true
+        fi
+        if [ "$pulled_any" = false ]; then
+            echo -e "${YELLOW}Warning: No secrets found inside unlocked SecretsVault.${NC}"
             exit 1
         fi
     else
@@ -367,6 +469,57 @@ cmd_status() {
         echo -e "  Local rclone.conf   : ${GREEN}PRESENT${NC} ($RCLONE_CONF_LOCAL)"
     else
         echo -e "  Local rclone.conf   : ${RED}MISSING${NC} ($RCLONE_CONF_LOCAL)"
+    fi
+    if [ -f "$SSH_KEY_LOCAL" ]; then
+        echo -e "  Local GitHub SSH Key: ${GREEN}PRESENT${NC} ($SSH_KEY_LOCAL)"
+    else
+        echo -e "  Local GitHub SSH Key: ${YELLOW}MISSING${NC} ($SSH_KEY_LOCAL)"
+    fi
+    local remote_url
+    remote_url="$(git -C "$DOTFILES_DIR" remote get-url origin 2>/dev/null || echo 'unknown')"
+    echo -e "  myLinux Git Remote  : ${CYAN}$remote_url${NC}"
+}
+
+cmd_ssh_setup() {
+    echo -e "${BLUE}===================================================================${NC}"
+    echo -e "${BLUE}   GitHub SSH Key Setup & SecretsVault Backup                      ${NC}"
+    echo -e "${BLUE}===================================================================${NC}"
+
+    mkdir -p "$SSH_DIR_LOCAL"
+    chmod 700 "$SSH_DIR_LOCAL"
+
+    if [ ! -f "$SSH_KEY_LOCAL" ]; then
+        echo -e "${GREEN}==> Generating new Ed25519 SSH key ($SSH_KEY_LOCAL)...${NC}"
+        ssh-keygen -t ed25519 -C "davegutz@alum.mit.edu" -f "$SSH_KEY_LOCAL" -N ""
+    else
+        echo -e "${GREEN}==> Existing SSH key found at $SSH_KEY_LOCAL.${NC}"
+    fi
+
+    ensure_github_ssh_setup
+
+    echo ""
+    echo -e "${YELLOW}${BOLD}Step 1: Copy this public key and add it to GitHub:${NC}"
+    echo -e "  1. Open: ${CYAN}https://github.com/settings/ssh/new${NC}"
+    echo -e "  2. Title: ${BOLD}myLinux (shared across machines via SecretsVault)${NC}"
+    echo -e "  3. Key type: ${BOLD}Authentication Key${NC}"
+    echo -e "  4. Paste the line below into the 'Key' box and click '${BOLD}Add SSH key${NC}':"
+    echo ""
+    echo -e "${GREEN}${BOLD}$(cat "$SSH_PUB_LOCAL")${NC}"
+    echo ""
+    if [ -t 0 ]; then
+        read -r -p "Press [Enter] once you have added the key on GitHub (or 's' to skip test): " ans
+        if [[ ! "$ans" =~ ^[Ss]$ ]]; then
+            echo -e "${BLUE}==> Testing SSH authentication with GitHub...${NC}"
+            ssh -T git@github.com || true
+        fi
+    fi
+
+    echo ""
+    echo -e "${YELLOW}${BOLD}Step 2: Saving SSH key into Cryptomator SecretsVault (auto-locks)...${NC}"
+    if [ -f "$VAULT_STORAGE/vault.cryptomator" ]; then
+        cmd_push
+    else
+        echo -e "${YELLOW}Note: SecretsVault not initialized yet. Run 'myLinux secrets setup' to store it.${NC}"
     fi
 }
 
@@ -433,16 +586,20 @@ case "${1:-sync}" in
     setup|init)
         cmd_setup
         ;;
+    ssh|ssh-setup)
+        cmd_ssh_setup
+        ;;
     -h|--help|help)
-        echo "Usage: $(basename "$0") [sync|setup|push|pull|lock|status]"
+        echo "Usage: $(basename "$0") [sync|setup|ssh|push|pull|lock|status]"
         echo ""
         echo "Commands:"
-        echo "  sync     Unlock SecretsVault (120s timeout) and sync rclone/rclone.conf (default)"
-        echo "  setup    Initialize or add SecretsVault in Cryptomator and populate rclone/rclone.conf"
-        echo "  push     Copy local ~/.config/rclone/rclone.conf into SecretsVault/rclone/rclone.conf"
-        echo "  pull     Restore SecretsVault/rclone/rclone.conf to ~/.config/rclone/rclone.conf"
+        echo "  sync     Unlock SecretsVault (120s timeout), sync rclone.conf & SSH keys, and auto-lock"
+        echo "  setup    Initialize or add SecretsVault in Cryptomator and populate secrets"
+        echo "  ssh      Generate GitHub Ed25519 SSH key, switch git remote to SSH, and save into SecretsVault"
+        echo "  push     Copy local rclone.conf, ~/.ssh/id_ed25519, & .git-credentials into SecretsVault"
+        echo "  pull     Restore rclone.conf, ~/.ssh/id_ed25519, & .git-credentials from SecretsVault"
         echo "  lock     Unmount and lock SecretsVault"
-        echo "  status   Show SecretsVault and local rclone.conf status"
+        echo "  status   Show SecretsVault, local rclone.conf, and GitHub SSH status"
         ;;
     *)
         echo "Unknown action: $1"

@@ -18,7 +18,7 @@ usage() {
     echo "  autostart [DE]        Manage autostart packages (cosmic | gnome | plasma | detect | status)"
     echo "  daemon [action]       Manage rclone daily backup daemon (status | enable | disable | run | logs)"
     echo "  security [action]     Security scanner & audit (scan | enable | disable | timer | logs)"
-    echo "  secrets [action]      Manage Cryptomator SecretsVault for rclone.conf (sync | setup | push | pull | lock | status)"
+    echo "  secrets [action]      Manage Cryptomator SecretsVault (sync | setup | ssh | push | pull | lock | status)"
     echo "  finance [action]      Manage financial vaults and backups (status | backup | lock | logs)"
     echo "  cd                    Print path to myLinux repository (eval \"cd \$(dotfiles cd)\")"
     echo "  help                  Show this help message"

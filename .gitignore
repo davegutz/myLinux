@@ -10,6 +10,9 @@ __pycache__/
 common/.msmtprc
 rclone.conf
 **/rclone/rclone.conf
+id_ed25519
+id_ed25519.pub
+.git-credentials
 .idea/
 
 # Explicitly allow Cryptomator encrypted vault in repository for GitHub sync
