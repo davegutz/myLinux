@@ -496,9 +496,9 @@ credit_width=96
 [Window 1]
 PageCount=6
 FirstPage=1
-PageOrder=6;5;4;3;2;1;
+PageOrder=4;6;5;3;2;1;
 WindowPosition=20;20;
-WindowGeometry=948;506;
+WindowGeometry=948;987;
 WindowMaximized=false
 ToolbarVisible=true
 SummarybarVisible=true

@@ -15,6 +15,11 @@ BOLD='\033[1m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# Configurable Host, Port, and Monitor URL for MotionEye Web Dashboard & Recording access
+MOTIONEYE_PORT="${MOTIONEYE_PORT:-8765}"
+MOTIONEYE_HOST="${MOTIONEYE_HOST:-$(hostname)}"
+MONITOR_URL="${MONITOR_URL:-http://${MOTIONEYE_HOST}:${MOTIONEYE_PORT}}"
+
 echo -e "${BLUE}====================================================${NC}"
 echo -e "${BLUE}   Automated Security Camera Setup (motionEye)      ${NC}"
 echo -e "${BLUE}====================================================${NC}"
@@ -101,20 +106,36 @@ if [ ! -L "/usr/local/bin/meyectl" ]; then
     sudo ln -sf /opt/motioneye/bin/meyectl /usr/local/bin/meyectl
 fi
 
+# Ensure motionEye subprocesses (like background cleanup) locate the config directory
+sudo mkdir -p /opt/motioneye/etc
+sudo ln -sf /etc/motioneye /opt/motioneye/etc/motioneye
+
+# Detect installed virtualenv Python version
+PY_VER=$(find /opt/motioneye/lib -maxdepth 1 -type d -name "python3.*" 2>/dev/null | head -n 1 | xargs -r basename)
+
+# Create compatibility symlinks for alternate python versions so legacy configs resolve
+if [ -n "$PY_VER" ]; then
+    for legacy_py in python3.10 python3.11 python3.12 python3.13 python3.14; do
+        if [ "$legacy_py" != "$PY_VER" ] && [ ! -e "/opt/motioneye/lib/$legacy_py" ]; then
+            sudo ln -sf "/opt/motioneye/lib/$PY_VER" "/opt/motioneye/lib/$legacy_py"
+        fi
+    done
+fi
+
 # 4. Deploy motionEye configuration & systemd service
 echo -e "\n${GREEN}[Step 4/7] Configuring motionEye and motion settings...${NC}"
 
 # Deploy base motioneye.conf if not present
 if [ ! -f "/etc/motioneye/motioneye.conf" ]; then
     echo "Generating /etc/motioneye/motioneye.conf..."
-    sudo tee /etc/motioneye/motioneye.conf >/dev/null << 'EOF'
+    sudo tee /etc/motioneye/motioneye.conf >/dev/null << EOF
 conf_path /etc/motioneye
 run_path /run/motioneye
 log_path /var/log/motioneye
 media_path /var/lib/motioneye
 log_level info
 listen 0.0.0.0
-port 8765
+port ${MOTIONEYE_PORT}
 motion_control_localhost true
 motion_control_port 7999
 motion_check_interval 10
@@ -124,6 +145,12 @@ add_remove_cameras true
 EOF
     sudo chown motion:motion /etc/motioneye/motioneye.conf
 fi
+
+# Configure monitor URL for email notification links
+echo "Configuring camera monitor URL link: $MONITOR_URL"
+echo "$MONITOR_URL" | sudo tee /etc/motioneye/monitor_url >/dev/null
+sudo chown motion:motion /etc/motioneye/monitor_url
+sudo chmod 644 /etc/motioneye/monitor_url
 
 # Check for backup config tarball from myComputer
 if [ -f "$MYCOMPUTER_DIR/motioneye-config.tar.gz" ]; then
@@ -138,6 +165,49 @@ if [ -f "/etc/motioneye/camera-1.conf" ]; then
     sudo sed -i 's/movie_codec mp4:h264_v4l2m2m/movie_codec mp4/' /etc/motioneye/camera-1.conf
     sudo sed -i 's/movie_codec mp4:h264_omx/movie_codec mp4/' /etc/motioneye/camera-1.conf
 fi
+
+# Ensure camera configs use the active python version in event hooks (sendmail, relayevent)
+if [ -n "$PY_VER" ]; then
+    echo "Adapting camera event hook paths to active virtualenv Python ($PY_VER)..."
+    for conf in /etc/motioneye/camera-*.conf; do
+        if [ -f "$conf" ]; then
+            sudo sed -i -E "s|/opt/motioneye/lib/python3\.[0-9]+/|/opt/motioneye/lib/${PY_VER}/|g" "$conf"
+        fi
+    done
+fi
+
+# Inject monitoring URL link into motionEye email transmission
+echo "Injecting monitoring URL link ($MONITOR_URL) into motionEye sendmail..."
+sudo /opt/motioneye/bin/python3 -c "
+import glob
+
+patch_code = '''    # Append configured monitor URL for viewing recordings
+    if 'View recordings & live monitor:' not in message:
+        monitor_url = None
+        url_file = '/etc/motioneye/monitor_url'
+        if os.path.isfile(url_file):
+            try:
+                with open(url_file, 'r') as f:
+                    monitor_url = f.read().strip()
+            except Exception:
+                pass
+        if not monitor_url:
+            p = getattr(settings, 'PORT', 8765)
+            monitor_url = f'http://{socket.gethostname()}:{p}'
+        message = message.strip() + f'\\\\n\\\\nView recordings & live monitor:\\\\n{monitor_url}\\\\n'
+'''
+
+for sendmail_path in glob.glob('/opt/motioneye/lib/python*/site-packages/motioneye/sendmail.py'):
+    with open(sendmail_path, 'r') as f:
+        content = f.read()
+    if 'View recordings & live monitor:' not in content:
+        target = '    email = MIMEMultipart()'
+        if target in content:
+            new_content = content.replace(target, patch_code + '\n' + target, 1)
+            with open(sendmail_path, 'w') as f:
+                f.write(new_content)
+            print(f'Patched {sendmail_path} with monitor link')
+"
 
 # Deploy systemd service unit
 if [ ! -f "/etc/systemd/system/motioneye.service" ]; then
@@ -232,10 +302,10 @@ fi
 # 7. Firewall & Service Activation
 echo -e "\n${GREEN}[Step 7/7] Configuring firewall and activating motionEye service...${NC}"
 
-# Open port 8765 if ufw is active
+# Open port if ufw is active
 if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -qw "active"; then
-    echo "Opening firewall port 8765/tcp in ufw..."
-    sudo ufw allow 8765/tcp comment 'motionEye Web Interface' || true
+    echo "Opening firewall port ${MOTIONEYE_PORT}/tcp in ufw..."
+    sudo ufw allow "${MOTIONEYE_PORT}/tcp" comment 'motionEye Web Interface' || true
 fi
 
 # Reload systemd and enable/start motioneye
@@ -252,10 +322,11 @@ if command -v tailscale >/dev/null 2>&1; then
     TS_IP=$(tailscale ip -4 2>/dev/null || true)
 fi
 
-echo -e "${BOLD}Web Dashboard URL:${NC}"
-echo -e "  Local:        ${YELLOW}http://localhost:8765${NC} or ${YELLOW}http://${LOCAL_IP}:8765${NC}"
+echo -e "${BOLD}Web Dashboard / Monitor URL:${NC}"
+echo -e "  Configured:   ${YELLOW}${MONITOR_URL}${NC}"
+echo -e "  Local:        ${YELLOW}http://localhost:${MOTIONEYE_PORT}${NC} or ${YELLOW}http://${LOCAL_IP}:${MOTIONEYE_PORT}${NC}"
 if [ -n "$TS_IP" ]; then
-    echo -e "  Tailscale:    ${YELLOW}http://${TS_IP}:8765${NC}"
+    echo -e "  Tailscale:    ${YELLOW}http://${TS_IP}:${MOTIONEYE_PORT}${NC}"
 fi
 
 echo -e "\n${GREEN}--- Phone Setup (Tailscale Remote Access) ---${NC}"
@@ -263,9 +334,9 @@ echo -e "  1. Install ${BOLD}Tailscale${NC} from the Google Play Store or Apple 
 echo -e "  2. Sign in as designated Tailscale user: ${CYAN}davegutz2006@gmail.com${NC}"
 echo -e "  3. Toggle the Tailscale VPN switch to ${BOLD}Connected${NC}."
 if [ -n "$TS_IP" ]; then
-    echo -e "  4. In your phone browser, open: ${YELLOW}http://${TS_IP}:8765${NC}"
+    echo -e "  4. In your phone browser, open: ${YELLOW}http://${TS_IP}:${MOTIONEYE_PORT}${NC} (or ${YELLOW}${MONITOR_URL}${NC})"
 else
-    echo -e "  4. In your phone browser, open: ${YELLOW}http://<tailscale-ip>:8765${NC}"
+    echo -e "  4. In your phone browser, open: ${YELLOW}${MONITOR_URL}${NC}"
 fi
 echo -e "  5. Log in with viewer account (username: ${CYAN}user${NC}, password set in motionEye General Settings)."
 echo -e "     ${YELLOW}Tip:${NC} In mobile Chrome, tap menu (⋮) -> 'Add to Home screen' for 1-tap app access."
