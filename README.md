@@ -679,6 +679,34 @@ By default, `systemd-homed` uses `shrink-and-grow` mode on BTRFS loopback contai
 
 ---
 
+### 4. Lubuntu (LXQt) Wi-Fi Stability & Network Guard
+On Lubuntu 24.04 laptops (e.g., Lenovo with Intel Wireless-AC 9560 / `iwlwifi`), intermittent Wi-Fi / DNS drops (`DNS_PROBE_FINISHED_NO_INTERNET`) are caused by three specific conflicts. `scripts/bootstrap.sh` automatically guards against the first two when running on Lubuntu/LXQt:
+
+1. **Competing DHCP Clients (`dhcpcd5` vs. `NetworkManager`):**
+   * **Issue:** Lubuntu uses `NetworkManager` by default. If `dhcpcd5` is installed (`sudo apt install -y dhcpcd5`), `dhcpcd.service` runs in parallel with `NetworkManager`, acquires a second IP on the same Wi-Fi interface, and repeatedly flushes the default gateway (`deleting default route via ...`) during lease checks.
+   * **Automated Guard & Manual Fix:** `scripts/bootstrap.sh` automatically stops and disables `dhcpcd` on Lubuntu if `NetworkManager` is active. To purge manually:
+     ```bash
+     sudo systemctl stop dhcpcd
+     sudo systemctl disable dhcpcd
+     sudo apt purge -y dhcpcd5 dhcpcd
+     ```
+2. **Aggressive Wi-Fi Power Saving (`wifi.powersave = 3`):**
+   * **Issue:** Default Wi-Fi power management (`3`) causes latency spikes and dropped beacon frames on Intel (`iwlwifi`) chipsets.
+   * **Automated Guard & Manual Fix:** `scripts/bootstrap.sh` automatically updates `/etc/NetworkManager/conf.d/default-wifi-powersave-on.conf` on Lubuntu from `wifi.powersave = 3` to `wifi.powersave = 2` (disabled).
+     ```bash
+     sudo sed -i 's/wifi.powersave = 3/wifi.powersave = 2/' /etc/NetworkManager/conf.d/default-wifi-powersave-on.conf
+     sudo systemctl restart NetworkManager
+     ```
+3. **Duplicate Wi-Fi Connection Profiles (`nm-tray`):**
+   * **Issue:** Multiple saved profiles for the same SSID with auto-connect enabled can cause `nm-tray` to disconnect and switch between profiles.
+   * **Fix:** List connection profiles and delete redundant UUIDs:
+     ```bash
+     nmcli connection show
+     sudo nmcli connection delete <DUPLICATE_UUID>
+     ```
+
+---
+
 ## Machine-Specific Customization (`.bashrc.local`)
 
 To add machine-specific exports, unique API tokens, or hardware-specific aliases without committing them to the shared repository:

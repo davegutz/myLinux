@@ -75,6 +75,27 @@ elif [ -f /etc/debian_version ]; then
     if command -v snap >/dev/null 2>&1 && snap list firefox >/dev/null 2>&1; then
         sudo snap connect firefox:u2f-devices 2>/dev/null || true
     fi
+
+    # Lubuntu / LXQt Network Stability Guard:
+    # 1) Prevent standalone dhcpcd from competing with NetworkManager over Wi-Fi leases/routes
+    # 2) Disable aggressive Wi-Fi power saving (wifi.powersave = 2) on Intel/Realtek adapters
+    DE_CHECK="$(echo "${XDG_CURRENT_DESKTOP:-}-${DESKTOP_SESSION:-}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$DE_CHECK" == *"lxqt"* || "$DE_CHECK" == *"lubuntu"* ]]; then
+        if systemctl is-active --quiet NetworkManager 2>/dev/null; then
+            if systemctl is-active --quiet dhcpcd 2>/dev/null || systemctl is-enabled --quiet dhcpcd 2>/dev/null; then
+                echo "Lubuntu detected: Disabling conflicting standalone dhcpcd service (NetworkManager handles DHCP)..."
+                sudo systemctl stop dhcpcd 2>/dev/null || true
+                sudo systemctl disable dhcpcd 2>/dev/null || true
+            fi
+        fi
+
+        NM_POWERSAVE_CONF="/etc/NetworkManager/conf.d/default-wifi-powersave-on.conf"
+        if [ -f "$NM_POWERSAVE_CONF" ] && grep -q "wifi.powersave = 3" "$NM_POWERSAVE_CONF" 2>/dev/null; then
+            echo "Lubuntu detected: Disabling aggressive Wi-Fi power saving (wifi.powersave = 2)..."
+            sudo sed -i 's/wifi.powersave = 3/wifi.powersave = 2/' "$NM_POWERSAVE_CONF" 2>/dev/null || true
+            sudo systemctl reload-or-restart NetworkManager 2>/dev/null || true
+        fi
+    fi
 else
     echo -e "${YELLOW}Notice: Unsupported or unrecognized distribution. Skipping package installation.${NC}"
 fi
