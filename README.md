@@ -770,6 +770,7 @@ Run the installer at any time:
 ### Accessing the Web Dashboard
 * **Local LAN**: `http://localhost:8765` or `http://<machine-ip>:8765`
 * **Tailscale**: `http://<tailscale-ip>:8765` (or `http://omen-cachyos-x8664:8765`)
+* **URL Parameter Auto-Login**: Navigating to `http://<host>:8765/?user=<username>&pass=<password>` automatically validates credentials, issues a 30-day session cookie, and opens the dashboard without any login dialog.
 * **Guest Viewer Mode**: The web dashboard opens directly in viewer mode with no password prompt. To change settings or manage cameras, tap the Switch User icon in the top-left (or visit `?admin=1`) and log in as `admin`.
 
 ### Push Notifications (`ntfy.sh`)

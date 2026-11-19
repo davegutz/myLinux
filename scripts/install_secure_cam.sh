@@ -20,6 +20,8 @@ MOTIONEYE_PORT="${MOTIONEYE_PORT:-8765}"
 MOTIONEYE_HOST="${MOTIONEYE_HOST:-$(hostname)}"
 MONITOR_URL="${MONITOR_URL:-http://${MOTIONEYE_HOST}:${MOTIONEYE_PORT}}"
 NTFY_TOPIC="${NTFY_TOPIC:-gutz_camera_alerts}"
+SURVEILLANCE_USER="${SURVEILLANCE_USER:-user}"
+SURVEILLANCE_PASSWORD="${SURVEILLANCE_PASSWORD:-}"
 
 echo -e "${BLUE}====================================================${NC}"
 echo -e "${BLUE}   Automated Security Camera Setup (motionEye)      ${NC}"
@@ -159,6 +161,14 @@ echo "$NTFY_TOPIC" | sudo tee /etc/motioneye/ntfy_topic >/dev/null
 sudo chown motion:motion /etc/motioneye/ntfy_topic
 sudo chmod 644 /etc/motioneye/ntfy_topic
 
+# Store surveillance viewer password for auto-login URL generation if provided
+if [ -n "$SURVEILLANCE_PASSWORD" ]; then
+    echo "Configuring surveillance viewer credentials in /etc/motioneye/surveillance_password..."
+    echo "$SURVEILLANCE_PASSWORD" | sudo tee /etc/motioneye/surveillance_password >/dev/null
+    sudo chown motion:motion /etc/motioneye/surveillance_password
+    sudo chmod 600 /etc/motioneye/surveillance_password
+fi
+
 # Check for backup config tarball from myComputer
 if [ -f "$MYCOMPUTER_DIR/motioneye-config.tar.gz" ]; then
     echo "Found motioneye-config.tar.gz in myComputer. Restoring..."
@@ -201,8 +211,23 @@ patch_code = '''    # Append configured monitor URL for viewing recordings
         p = getattr(settings, 'PORT', 8765)
         monitor_url = f'http://{socket.gethostname()}:{p}'
 
+    # Check for surveillance auto-login password
+    autologin_url = monitor_url
+    pass_file = '/etc/motioneye/surveillance_password'
+    if os.path.isfile(pass_file):
+        try:
+            with open(pass_file, 'r') as f:
+                s_pass = f.read().strip()
+            if s_pass:
+                import urllib.parse
+                s_user = 'user'
+                sep = '&' if '?' in monitor_url else '?'
+                autologin_url = f'{monitor_url}/{sep}user={urllib.parse.quote(s_user)}&pass={urllib.parse.quote(s_pass)}'
+        except Exception:
+            pass
+
     if 'View recordings & live monitor:' not in message:
-        message = message.strip() + f'\\\\n\\\\nView recordings & live monitor:\\\\n{monitor_url}\\\\n'
+        message = message.strip() + f'\\\\n\\\\nView recordings & live monitor:\\\\n{autologin_url}\\\\n'
 
     # Dispatch push notification to ntfy.sh if topic is configured
     try:
@@ -224,8 +249,8 @@ patch_code = '''    # Append configured monitor URL for viewing recordings
                 'Priority': 'default',
                 'Tags': 'video_camera,warning',
             }
-            if monitor_url:
-                ntfy_headers['Click'] = monitor_url
+            if autologin_url:
+                ntfy_headers['Click'] = autologin_url
             ntfy_body = message.strip().encode('utf-8')
             ntfy_req = urllib.request.Request(
                 f'https://ntfy.sh/{ntfy_topic}',
@@ -258,6 +283,81 @@ for sendmail_path in glob.glob('/opt/motioneye/lib/python*/site-packages/motione
         with open(sendmail_path, 'w') as f:
             f.write(content)
         print(f'Patched {sendmail_path} with monitor link & ntfy push alerts')
+"
+
+# Enable URL Parameter Auto-Login (?user=...&pass=...) in MainHandler
+echo "Enabling URL parameter auto-login in motionEye MainHandler..."
+sudo /opt/motioneye/bin/python3 -c "
+import glob
+
+patch_main = '''class MainHandler(BaseHandler):
+    def get(self):
+        # Auto-login via URL parameters (?user=...&pass=... or ?username=...&password=...)
+        username = self.get_argument('user', self.get_argument('username', None))
+        password = self.get_argument('pass', self.get_argument('password', None))
+        if username and password is not None:
+            try:
+                from motioneye.handlers.login import (
+                    verify_argon2_password,
+                    verify_legacy_sha1_password,
+                    should_use_secure_cookie,
+                )
+                from motioneye.handlers.base import create_session
+                from motioneye.utils.authstate import build_password_hash_state
+
+                main_config = config.get_main()
+                hash_state = build_password_hash_state(main_config)
+                user_type = None
+                stored_hash = ''
+                hash_type = ''
+
+                if username == main_config.get('@admin_username'):
+                    user_type = 'admin'
+                    stored_hash = main_config.get('@admin_password') or ''
+                    hash_type = hash_state.admin.hash_type
+                elif username == main_config.get('@normal_username'):
+                    user_type = 'normal'
+                    stored_hash = main_config.get('@normal_password') or ''
+                    hash_type = hash_state.normal.hash_type
+
+                if user_type:
+                    valid = False
+                    if hash_type == 'argon2':
+                        valid = verify_argon2_password(stored_hash, password)
+                    elif hash_type == 'legacy':
+                        valid = (password == stored_hash) or verify_legacy_sha1_password(stored_hash, password)
+                    elif hash_type == 'missing':
+                        valid = (password == '')
+
+                    if valid:
+                        session_id = create_session(user_type)
+                        self.set_secure_cookie(
+                            'user',
+                            session_id,
+                            expires_days=30,
+                            httponly=True,
+                            secure=should_use_secure_cookie(self),
+                            samesite='Strict',
+                        )
+                        self.current_user = user_type
+            except Exception as e:
+                import logging
+                logging.warning(f'URL parameter auto-login failed: {e}')
+
+        # additional config'''
+
+for main_path in glob.glob('/opt/motioneye/lib/python*/site-packages/motioneye/handlers/main.py'):
+    with open(main_path, 'r') as f:
+        content = f.read()
+    if 'Auto-login via URL parameters' not in content:
+        target = '''class MainHandler(BaseHandler):
+    def get(self):
+        # additional config'''
+        if target in content:
+            content = content.replace(target, patch_main, 1)
+            with open(main_path, 'w') as f:
+                f.write(content)
+            print(f'Patched {main_path} for URL parameter auto-login')
 "
 
 # Enable Automatic Guest / Viewer Mode (zero-login monitoring)
