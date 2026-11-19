@@ -19,6 +19,7 @@ NC='\033[0m'
 MOTIONEYE_PORT="${MOTIONEYE_PORT:-8765}"
 MOTIONEYE_HOST="${MOTIONEYE_HOST:-$(hostname)}"
 MONITOR_URL="${MONITOR_URL:-http://${MOTIONEYE_HOST}:${MOTIONEYE_PORT}}"
+NTFY_TOPIC="${NTFY_TOPIC:-gutz_camera_alerts}"
 
 echo -e "${BLUE}====================================================${NC}"
 echo -e "${BLUE}   Automated Security Camera Setup (motionEye)      ${NC}"
@@ -152,6 +153,12 @@ echo "$MONITOR_URL" | sudo tee /etc/motioneye/monitor_url >/dev/null
 sudo chown motion:motion /etc/motioneye/monitor_url
 sudo chmod 644 /etc/motioneye/monitor_url
 
+# Configure ntfy.sh push notification topic
+echo "Configuring ntfy push notification topic: $NTFY_TOPIC"
+echo "$NTFY_TOPIC" | sudo tee /etc/motioneye/ntfy_topic >/dev/null
+sudo chown motion:motion /etc/motioneye/ntfy_topic
+sudo chmod 644 /etc/motioneye/ntfy_topic
+
 # Check for backup config tarball from myComputer
 if [ -f "$MYCOMPUTER_DIR/motioneye-config.tar.gz" ]; then
     echo "Found motioneye-config.tar.gz in myComputer. Restoring..."
@@ -176,37 +183,163 @@ if [ -n "$PY_VER" ]; then
     done
 fi
 
-# Inject monitoring URL link into motionEye email transmission
-echo "Injecting monitoring URL link ($MONITOR_URL) into motionEye sendmail..."
+# Inject monitoring URL link and ntfy push notification into motionEye alert transmission
+echo "Injecting monitor URL link ($MONITOR_URL) and ntfy push alerts ($NTFY_TOPIC) into motionEye..."
 sudo /opt/motioneye/bin/python3 -c "
 import glob
 
 patch_code = '''    # Append configured monitor URL for viewing recordings
+    monitor_url = None
+    url_file = '/etc/motioneye/monitor_url'
+    if os.path.isfile(url_file):
+        try:
+            with open(url_file, 'r') as f:
+                monitor_url = f.read().strip()
+        except Exception:
+            pass
+    if not monitor_url:
+        p = getattr(settings, 'PORT', 8765)
+        monitor_url = f'http://{socket.gethostname()}:{p}'
+
     if 'View recordings & live monitor:' not in message:
-        monitor_url = None
-        url_file = '/etc/motioneye/monitor_url'
-        if os.path.isfile(url_file):
+        message = message.strip() + f'\\\\n\\\\nView recordings & live monitor:\\\\n{monitor_url}\\\\n'
+
+    # Dispatch push notification to ntfy.sh if topic is configured
+    try:
+        ntfy_topic = None
+        topic_file = '/etc/motioneye/ntfy_topic'
+        if os.path.isfile(topic_file):
             try:
-                with open(url_file, 'r') as f:
-                    monitor_url = f.read().strip()
+                with open(topic_file, 'r') as f:
+                    ntfy_topic = f.read().strip()
             except Exception:
                 pass
-        if not monitor_url:
-            p = getattr(settings, 'PORT', 8765)
-            monitor_url = f'http://{socket.gethostname()}:{p}'
-        message = message.strip() + f'\\\\n\\\\nView recordings & live monitor:\\\\n{monitor_url}\\\\n'
+        if not ntfy_topic:
+            ntfy_topic = 'gutz_camera_alerts'
+
+        if ntfy_topic:
+            import urllib.request
+            ntfy_headers = {
+                'Title': str(subject).strip(),
+                'Priority': 'default',
+                'Tags': 'video_camera,warning',
+            }
+            if monitor_url:
+                ntfy_headers['Click'] = monitor_url
+            ntfy_body = message.strip().encode('utf-8')
+            ntfy_req = urllib.request.Request(
+                f'https://ntfy.sh/{ntfy_topic}',
+                data=ntfy_body,
+                headers=ntfy_headers,
+                method='POST',
+            )
+            with urllib.request.urlopen(ntfy_req, timeout=5) as ntfy_resp:
+                logging.info(f'ntfy notification sent to {ntfy_topic} (HTTP {ntfy_resp.status})')
+    except Exception as ntfy_err:
+        logging.warning(f'ntfy notification failed: {ntfy_err}')
 '''
 
 for sendmail_path in glob.glob('/opt/motioneye/lib/python*/site-packages/motioneye/sendmail.py'):
     with open(sendmail_path, 'r') as f:
         content = f.read()
-    if 'View recordings & live monitor:' not in content:
-        target = '    email = MIMEMultipart()'
-        if target in content:
-            new_content = content.replace(target, patch_code + '\n' + target, 1)
+
+    marker = '    # Append configured monitor URL for viewing recordings'
+    target = '    email = MIMEMultipart()'
+    if marker in content:
+        idx1 = content.find(marker)
+        idx2 = content.find(target)
+        if idx1 != -1 and idx2 != -1 and idx1 < idx2:
+            content = content[:idx1] + patch_code + '\n' + content[idx2:]
             with open(sendmail_path, 'w') as f:
-                f.write(new_content)
-            print(f'Patched {sendmail_path} with monitor link')
+                f.write(content)
+            print(f'Updated {sendmail_path} with ntfy push notification integration')
+    elif target in content:
+        content = content.replace(target, patch_code + '\n' + target, 1)
+        with open(sendmail_path, 'w') as f:
+            f.write(content)
+        print(f'Patched {sendmail_path} with monitor link & ntfy push alerts')
+"
+
+# Enable Automatic Guest / Viewer Mode (zero-login monitoring)
+echo "Enabling automatic guest viewer mode for live monitor & recordings..."
+sudo /opt/motioneye/bin/python3 -c "
+import glob
+
+# 1. Patch handlers/base.py so unauthenticated sessions default to 'normal' viewer
+for base_path in glob.glob('/opt/motioneye/lib/python*/site-packages/motioneye/handlers/base.py'):
+    with open(base_path, 'r') as f:
+        content = f.read()
+    target = '''            except (ValueError, TypeError):
+                return None
+
+        return None'''
+    replacement = '''            except (ValueError, TypeError):
+                return None
+
+        # Guest viewer mode: default unauthenticated visitors to 'normal' viewer
+        return 'normal\''''
+    if target in content:
+        with open(base_path, 'w') as f:
+            f.write(content.replace(target, replacement, 1))
+        print(f'Patched {base_path} for guest viewer mode')
+
+# 2. Patch handlers/login.py to extend admin session cookie lifetime to 30 days
+for login_path in glob.glob('/opt/motioneye/lib/python*/site-packages/motioneye/handlers/login.py'):
+    with open(login_path, 'r') as f:
+        content = f.read()
+    if 'expires_days=1,' in content:
+        with open(login_path, 'w') as f:
+            f.write(content.replace('expires_days=1,', 'expires_days=30,', 1))
+        print(f'Patched {login_path} for 30-day session lifetime')
+
+# 3. Patch static/js/main.js so switch user button prompts admin login and ?admin=1 works
+for js_path in glob.glob('/opt/motioneye/lib/python*/site-packages/motioneye/static/js/main.js'):
+    with open(js_path, 'r') as f:
+        content = f.read()
+    target_logout = \"\"\"    /* logout button */
+    \$('div.button.logout-button').on('click', doLogout);\"\"\"
+    replacement_logout = \"\"\"    /* logout / switch user button */
+    \$('div.button.logout-button').on('click', function() {
+        if (isAdmin()) {
+            doLogout();
+        } else {
+            runLoginDialog(function () {
+                window._loginRetry = true;
+                doAuth();
+            });
+        }
+    });\"\"\"
+    if target_logout in content:
+        content = content.replace(target_logout, replacement_logout, 1)
+
+    target_startup = '''    if(hasCurrentSession()) {
+        doAuth();
+    } else {
+        runLoginDialog(function () {
+            window._loginRetry = true;
+            doAuth();
+        });
+    }'''
+    replacement_startup = '''    var query = splitUrl().params;
+    if ((query.admin || query.login) && !isAdmin()) {
+        runLoginDialog(function () {
+            window._loginRetry = true;
+            doAuth();
+        });
+    } else if(hasCurrentSession()) {
+        doAuth();
+    } else {
+        runLoginDialog(function () {
+            window._loginRetry = true;
+            doAuth();
+        });
+    }'''
+    if target_startup in content:
+        content = content.replace(target_startup, replacement_startup, 1)
+
+    with open(js_path, 'w') as f:
+        f.write(content)
+    print(f'Patched {js_path} for seamless guest access & admin elevation')
 "
 
 # Deploy systemd service unit
@@ -338,8 +471,15 @@ if [ -n "$TS_IP" ]; then
 else
     echo -e "  4. In your phone browser, open: ${YELLOW}${MONITOR_URL}${NC}"
 fi
-echo -e "  5. Log in with viewer account (username: ${CYAN}user${NC}, password set in motionEye General Settings)."
+echo -e "  5. The dashboard opens automatically in Guest Viewer mode (no password required)."
+echo -e "     To manage settings: tap the top-left Switch User icon (or append ${YELLOW}?admin=1${NC}) to log in as ${CYAN}admin${NC}."
 echo -e "     ${YELLOW}Tip:${NC} In mobile Chrome, tap menu (⋮) -> 'Add to Home screen' for 1-tap app access."
+
+echo -e "\n${GREEN}--- Push Notifications (ntfy.sh) ---${NC}"
+echo -e "  Dedicated Camera Topic: ${CYAN}${NTFY_TOPIC}${NC}"
+echo -e "  1. Install ${BOLD}ntfy${NC} app on your phone (Android/iOS) or open in browser: ${YELLOW}https://ntfy.sh/${NTFY_TOPIC}${NC}"
+echo -e "  2. Tap ${BOLD}'+'${NC} and subscribe to: ${CYAN}${NTFY_TOPIC}${NC}"
+echo -e "  3. Every motion alert will ping your phone with a direct link to the camera monitor."
 
 echo -e "\n${GREEN}--- Gmail Motion Notification Filters ---${NC}"
 echo -e "  Targeted recipient emails (from motioneye-config.tar.gz):"
