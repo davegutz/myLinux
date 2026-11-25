@@ -43,6 +43,7 @@ mkdir -p "$HOME/Desktop"
 mkdir -p "$HOME/.config/gnucash"
 mkdir -p "$HOME/.local/share/applications"
 mkdir -p "$HOME/.local/share/Cryptomator/mnt"
+mkdir -p "$HOME/.putty/sessions"
 
 # 3. Re-stow configurations
 echo -e "${GREEN}==> Re-stowing common configurations into $HOME...${NC}"
@@ -77,6 +78,11 @@ chmod +x "$HOME/Desktop/"*.desktop "$HOME/.local/share/applications/"*.desktop 2
 # Refresh desktop database for application menus
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+fi
+
+# Sanitize trailing whitespace in PuTTY sessions to ensure clean device paths
+if [ -d "$HOME/.putty/sessions" ]; then
+    sed -i --follow-symlinks 's/[[:space:]]\+$//' "$HOME/.putty/sessions/"* 2>/dev/null || true
 fi
 
 # Reload systemd user daemon & ensure timer is active

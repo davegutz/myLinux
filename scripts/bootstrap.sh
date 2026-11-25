@@ -21,7 +21,7 @@ echo -e "\n${GREEN}[Step 1/6] Detecting distribution and installing core tools..
 
 if [ -f /etc/arch-release ]; then
     echo "Detected Arch-based system (CachyOS)."
-    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp rclone fuse3 libfido2 cryptomator"
+    PACKAGES="git stow alacritty tmux zoxide curl base-devel msmtp rclone fuse3 libfido2 cryptomator putty"
     # Check if packages are missing before running pacman
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
@@ -37,9 +37,15 @@ if [ -f /etc/arch-release ]; then
         echo "Core packages already installed."
     fi
 
+    # Ensure user has access to serial devices (uucp on Arch/CachyOS)
+    if ! id -nG "$USER" 2>/dev/null | grep -qw "uucp"; then
+        echo "Adding $USER to uucp group for serial port access (PuTTY)..."
+        sudo usermod -aG uucp "$USER" 2>/dev/null || true
+    fi
+
 elif [ -f /etc/debian_version ]; then
     echo "Detected Debian/Ubuntu-based system (Lubuntu/Ubuntu)."
-    PACKAGES="git stow alacritty tmux zoxide curl build-essential msmtp msmtp-mta rclone fuse3 libfido2-1"
+    PACKAGES="git stow alacritty tmux zoxide curl build-essential msmtp msmtp-mta rclone fuse3 libfido2-1 putty putty-tools"
     MISSING_PKGS=""
     for pkg in $PACKAGES; do
         if ! dpkg -s "$pkg" >/dev/null 2>&1; then
@@ -57,6 +63,12 @@ elif [ -f /etc/debian_version ]; then
         sudo apt-get clean || true
     else
         echo "Core packages already installed."
+    fi
+
+    # Ensure user has access to serial devices (dialout on Debian/Ubuntu)
+    if ! id -nG "$USER" 2>/dev/null | grep -qw "dialout"; then
+        echo "Adding $USER to dialout group for serial port access (PuTTY)..."
+        sudo usermod -aG dialout "$USER" 2>/dev/null || true
     fi
 
     # Ensure Cryptomator is installed on Debian/Ubuntu for financial vault decryption
@@ -124,6 +136,7 @@ mkdir -p "$HOME/.local/share/applications"
 mkdir -p "$HOME/.local/share/fonts"
 mkdir -p "$HOME/.local/share/gnucash/books"
 mkdir -p "$HOME/.local/share/Cryptomator/mnt"
+mkdir -p "$HOME/.putty/sessions"
 
 # Deploy configurations via GNU Stow
 echo "Symlinking common configurations via GNU Stow..."
@@ -171,6 +184,11 @@ fi
 # Refresh desktop database for application menus
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+fi
+
+# Sanitize trailing whitespace in PuTTY sessions to ensure clean device paths
+if [ -d "$HOME/.putty/sessions" ]; then
+    sed -i --follow-symlinks 's/[[:space:]]\+$//' "$HOME/.putty/sessions/"* 2>/dev/null || true
 fi
 
 # Enable and start the systemd user timer for daily rclone copy

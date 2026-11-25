@@ -46,6 +46,9 @@ MANAGED_FILES=(
     ".local/bin/gnucash-refresh"
     "Desktop/GnuCash-Joint.desktop"
     ".local/share/applications/GnuCash-Joint.desktop"
+    ".putty/sessions/def"
+    ".putty/sessions/test"
+    ".putty/sessions/testpro2p2"
 )
 
 backed_up_count=0
