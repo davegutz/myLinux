@@ -49,6 +49,8 @@ MANAGED_FILES=(
     ".putty/sessions/def"
     ".putty/sessions/test"
     ".putty/sessions/testpro2p2"
+    ".putty/sessions/testsoc3p2"
+    ".putty/sessions/testsoc4p2"
 )
 
 backed_up_count=0
