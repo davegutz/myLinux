@@ -8,10 +8,10 @@ case $- in
 esac
 
 # --- History Configuration ---
-HISTCONTROL=ignoreboth:erasedups
+HISTCONTROL=ignoreboth
 shopt -s histappend
-HISTSIZE=10000
-HISTFILESIZE=20000
+HISTSIZE=50000
+HISTFILESIZE=100000
 shopt -s checkwinsize
 
 # --- Environment & PATH ---
@@ -43,6 +43,12 @@ esac
 # --- Unified Git-Aware Colored Prompt ---
 __prompt_command() {
     local EXIT_STATUS="$?"
+
+    # Live cross-window command history synchronization
+    history -a
+    history -c
+    history -r
+
     local PS_SYMBOL="\\$"
     local PS_COLOR="\\[\\033[01;32m\\]" # Green if last cmd succeeded
     if [ $EXIT_STATUS -ne 0 ]; then
