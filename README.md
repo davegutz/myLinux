@@ -213,7 +213,8 @@ myLinux/
 │   │   ├── jobStat.sh                    # Transcode progress status reporter
 │   │   ├── Rclone                        # Google Drive mount and VFS cache refresh automation
 │   │   ├── run_time.sh                   # Video duration / ffprobe inspector
-│   │   └── stripit.sh                    # Video filename sanitization tool
+│   │   ├── stripit.sh                    # Video filename sanitization tool
+│   │   └── weather_clock.sh              # Console clock and wttr.in weather fetcher
 │   ├── Desktop/
 │   │   └── GnuCash-Joint.desktop         # Desktop launcher/widget for GnuCash Joint with cloud refresh
 │   ├── .config/
@@ -319,6 +320,7 @@ Once deployed, the following utilities and aliases are available in any terminal
 | Command / Alias | Action |
 |-----------------|--------|
 | `encodeLinux.sh` | Transcodes DVD discs to `.m4v` and fetches `.en.srt` subtitles into `~/Videos/encodeLinux` |
+| `weather_clock.sh` | Displays current time, date, and local temperature from wttr.in |
 | `mylinux-sync` / `dotfiles sync` | Pulls latest Git commits and re-stows configurations & active autostart profile |
 | `mylinux-update` / `dotfiles update` | Pulls Git changes, re-stows, and runs a full system update (`pacman`/`paru` or `apt` + `flatpaks`) |
 | `dotfiles check` | Queries GitHub to see if remote commits or updates are available |
